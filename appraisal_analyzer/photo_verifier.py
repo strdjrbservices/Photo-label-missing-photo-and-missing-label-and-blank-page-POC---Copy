@@ -479,10 +479,10 @@ class PhotoVerifier:
                 if output_dir:
                     os.makedirs(output_dir, exist_ok=True)
                     clean_slot = re.sub(
-                        r"[\s\(\)\/\\:]+", "_", slot["slot_name"]
+                        r"[^\w\-]+", "_", slot["slot_name"]
                     ).strip("_")
                     clean_lbl = (
-                        re.sub(r"[\s\(\)\/\\:]+", "_", label[:30]).strip("_")
+                        re.sub(r"[^\w\-]+", "_", label[:30]).strip("_")
                         if label
                         else "unlabeled"
                     )
