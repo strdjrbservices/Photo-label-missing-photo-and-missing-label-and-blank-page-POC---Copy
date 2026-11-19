@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.env
+
+# Django
+*.log
+local_settings.py
+db.sqlite3-journal
+
+# Staticfiles & Media (transient uploads/cache)
+staticfiles/
+media/uploads/*
+!media/uploads/.gitkeep
+media/extracted_photos/*
+!media/extracted_photos/.gitkeep
+media/audit_reports/*
+!media/audit_reports/.gitkeep
+media/blank_previews/*
+!media/blank_previews/.gitkeep
+
+# Archives & bundles
+*.zip
+*.tar.gz
+scratch/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo

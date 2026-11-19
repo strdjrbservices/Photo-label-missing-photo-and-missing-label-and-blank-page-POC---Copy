@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Report: {{ audit.file_name }} - AppraisalGuard{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb & Top Bar -->
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item"><a href="{% url 'audit_index' %}" class="text-decoration-none text-muted"><i class="bi bi-grid-1x2 me-1"></i> Dashboard</a></li>
+        <li class="breadcrumb-item text-muted">Audits</li>
+        <li class="breadcrumb-item active fw-semibold text-dark" aria-current="page">{{ audit.file_name }}</li>
+    </ol>
+</nav>
+
+<!-- Header Card -->
+<div class="card card-enterprise shadow-sm mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+            <div>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span class="pill-badge pill-primary">{{ audit.report_type }} REPORT</span>
+                    <span class="pill-badge {% if audit.status == 'COMPLETED' %}pill-success{% elif audit.status == 'PROCESSING' %}pill-warning{% else %}pill-danger{% endif %}">
+                        <i class="bi {% if audit.status == 'COMPLETED' %}bi-check-circle-fill{% else %}bi-info-circle-fill{% endif %}"></i> {{ audit.status }}
+                    </span>
+                    <span class="text-muted small code-font"><i class="bi bi-stopwatch"></i> {{ audit.execution_time_seconds }}s</span>
+                    <span class="text-muted small">&bull; {{ audit.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <h2 class="h4 fw-bold text-dark mb-1">{{ audit.file_name }}</h2>
+                {% if audit.property_address %}
+                    <div class="text-secondary fw-medium">
+                        <i class="bi bi-geo-alt-fill text-danger me-1"></i> {{ audit.property_address }}{% if audit.city %}, {{ audit.city }}{% endif %}{% if audit.state %}, {{ audit.state }}{% endif %}{% if audit.postal_code %} {{ audit.postal_code }}{% endif %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Export Buttons -->
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if audit.excel_report %}
+                    <a href="{{ audit.excel_report.url }}" class="btn btn-success shadow-sm d-flex align-items-center gap-2 fw-semibold px-3" download>
+                        <i class="bi bi-file-earmark-spreadsheet-fill"></i> Download Excel (.xlsx)
+                    </a>
+                {% endif %}
+                {% if audit.json_report %}
+                    <a href="{{ audit.json_report.url }}" class="btn btn-outline-secondary d-flex align-items-center gap-2 fw-semibold px-3" download>
+                        <i class="bi bi-file-code-fill"></i> Download JSON
+                    </a>
+                {% endif %}
+                <a href="{% url 'audit_index' %}" class="btn btn-outline-primary d-flex align-items-center gap-1">
+                    <i class="bi bi-arrow-left"></i> Dashboard
+                </a>
+            </div>
+        </div>
+
+        <hr class="my-3 text-secondary opacity-25">
+
+        <!-- Property Metadata KPI Bar -->
+        <div class="row g-3 text-center text-md-start">
+            <div class="col-6 col-md-2 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Appraised Value</div>
+                <div class="fw-bold text-dark fs-5 mt-1">{{ audit.appraised_value|default:"N/A" }}</div>
+            </div>
+            <div class="col-6 col-md-2 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Gross Living Area</div>
+                <div class="fw-bold text-dark fs-5 mt-1">{% if audit.gross_living_area %}{{ audit.gross_living_area|floatformat:0 }} sqft{% else %}N/A{% endif %}</div>
+            </div>
+            <div class="col-6 col-md-2 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Bedrooms (XML)</div>
+                <div class="fw-bold text-dark fs-5 mt-1">{{ audit.total_bedrooms|default:"N/A" }}</div>
+            </div>
+            <div class="col-6 col-md-2 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Bathrooms (XML)</div>
+                <div class="fw-bold text-dark fs-5 mt-1">{{ audit.total_bathrooms|default:"N/A" }}</div>
+            </div>
+            <div class="col-6 col-md-2 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Photo Slots</div>
+                <div class="fw-bold text-primary fs-5 mt-1">{{ audit.total_slots_scanned }} <span class="text-muted fs-6 fw-normal">({{ audit.labeled_photos_count }} labeled)</span></div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">MISMO Version</div>
+                <div class="fw-bold text-dark fs-5 mt-1">{{ audit.mismo_version|default:"2.6" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Executive QA Summary Cards -->
+<div class="row g-3 mb-4">
+    <!-- Task 1: Bed/Bath Reconciliation -->
+    <div class="col-md-4">
+        <div class="card card-enterprise h-100 p-3 shadow-xs border-start border-4 border-info">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-door-closed text-info fs-5"></i> Bed / Bath Reconciliation
+                </span>
+                {% if audit.bedroom_discrepancy %}
+                    <span class="pill-badge pill-warning"><i class="bi bi-exclamation-circle-fill"></i> Discrepancy</span>
+                {% else %}
+                    <span class="pill-badge pill-success"><i class="bi bi-check-circle-fill"></i> Verified</span>
+                {% endif %}
+            </div>
+            <div class="small">
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Bedrooms Declared vs Photos:</span>
+                    <span class="fw-bold text-dark">{{ audit.total_bedrooms|default:"-" }} XML &harr; {{ audit.bedroom_photos_identified }} Photos</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">Bathrooms Declared vs Photos:</span>
+                    <span class="fw-bold text-dark">{{ audit.total_bathrooms|default:"-" }} XML &harr; {{ audit.bathroom_photos_identified }} Photos</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task 2: Missing Labels -->
+    <div class="col-md-4">
+        <div class="card card-enterprise h-100 p-3 shadow-xs border-start border-4 {% if audit.missing_label_count > 0 %}border-danger{% else %}border-success{% endif %}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-tag text-primary fs-5"></i> Photo Label Audit
+                </span>
+                {% if audit.missing_label_count > 0 %}
+                    <span class="pill-badge pill-danger"><i class="bi bi-exclamation-triangle-fill"></i> {{ audit.missing_label_count }} Missing Labels</span>
+                {% else %}
+                    <span class="pill-badge pill-success"><i class="bi bi-check-circle-fill"></i> All Labeled</span>
+                {% endif %}
+            </div>
+            <p class="small text-muted mb-0">
+                {% if audit.missing_label_count > 0 %}
+                    <strong class="text-danger">{{ audit.missing_label_count }} photo(s)</strong> attached to report without appraiser text labels.
+                {% else %}
+                    All {{ audit.labeled_photos_count }} attached photos contain corresponding appraiser text labels.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Task 3: Blank Pages -->
+    <div class="col-md-4">
+        <div class="card card-enterprise h-100 p-3 shadow-xs border-start border-4 {% if audit.blank_pages_count > 0 %}border-warning{% else %}border-success{% endif %}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-file-earmark-x text-warning fs-5"></i> OpenCV Blank Pages
+                </span>
+                {% if audit.blank_pages_count > 0 %}
+                    <span class="pill-badge pill-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ audit.blank_pages_count }} Blank Pages</span>
+                {% else %}
+                    <span class="pill-badge pill-success"><i class="bi bi-check-circle-fill"></i> 0 Blank Pages</span>
+                {% endif %}
+            </div>
+            <p class="small text-muted mb-0">
+                Scanned <strong>{{ audit.total_pages_scanned }}</strong> document pages using body Laplacian variance & Canny edge density.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Main Tabs Section -->
+<div class="card card-enterprise shadow-sm mb-5">
+    <div class="card-header bg-white border-bottom p-0">
+        <ul class="nav nav-tabs border-0 px-3 pt-2" id="auditTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active fw-bold py-3 px-4 d-flex align-items-center gap-2" id="photos-tab" data-bs-toggle="tab" data-bs-target="#photos-pane" type="button" role="tab">
+                    <i class="bi bi-images text-primary"></i>
+                    <span>Photo Gallery</span>
+                    <span class="chip-badge">{{ photo_slots.count }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold py-3 px-4 d-flex align-items-center gap-2" id="missing-tab" data-bs-toggle="tab" data-bs-target="#missing-pane" type="button" role="tab">
+                    <i class="bi bi-exclamation-triangle text-danger"></i>
+                    <span>Missing Labels & Flags</span>
+                    {% if missing_labels_list.count > 0 %}
+                        <span class="pill-badge pill-danger py-0 px-2" style="font-size: 0.72rem;">{{ missing_labels_list.count }}</span>
+                    {% else %}
+                        <span class="pill-badge pill-success py-0 px-2" style="font-size: 0.72rem;">0</span>
+                    {% endif %}
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold py-3 px-4 d-flex align-items-center gap-2" id="blanks-tab" data-bs-toggle="tab" data-bs-target="#blanks-pane" type="button" role="tab">
+                    <i class="bi bi-file-earmark-x text-warning"></i>
+                    <span>Blank Pages (OpenCV)</span>
+                    {% if flagged_blanks.count > 0 %}
+                        <span class="pill-badge pill-warning py-0 px-2" style="font-size: 0.72rem;">{{ flagged_blanks.count }}</span>
+                    {% else %}
+                        <span class="chip-badge">{{ blank_pages.count }}</span>
+                    {% endif %}
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold py-3 px-4 d-flex align-items-center gap-2" id="json-tab" data-bs-toggle="tab" data-bs-target="#json-pane" type="button" role="tab">
+                    <i class="bi bi-code-slash text-secondary"></i>
+                    <span>Raw JSON Data</span>
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <div class="card-body p-4">
+        <div class="tab-content" id="auditTabsContent">
+            
+            <!-- TAB 1: PHOTO GALLERY -->
+            <div class="tab-pane fade show active" id="photos-pane" role="tabpanel">
+                <!-- Filter Toolbar -->
+                <div class="d-flex flex-column gap-3 mb-4 pb-3 border-bottom">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <!-- Real-time Filter Search -->
+                        <div class="input-group input-group-sm" style="max-width: 320px;">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0" id="photoSearchInput" placeholder="Quick search photo labels...">
+                        </div>
+
+                        <!-- Status Filter -->
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small fw-semibold"><i class="bi bi-flag"></i> Status:</span>
+                            <a href="?category={{ selected_category|default:'all' }}" class="filter-chip {% if not selected_status %}active{% endif %}">
+                                All Statuses
+                            </a>
+                            <a href="?status=missing_label{% if selected_category %}&category={{ selected_category }}{% endif %}" class="filter-chip {% if selected_status == 'missing_label' %}active{% endif %}">
+                                <i class="bi bi-exclamation-triangle-fill text-danger"></i> Missing Labels
+                            </a>
+                            <a href="?status=blurry{% if selected_category %}&category={{ selected_category }}{% endif %}" class="filter-chip {% if selected_status == 'blurry' %}active{% endif %}">
+                                <i class="bi bi-droplet-half text-warning"></i> Blurry Photos
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Category Chips -->
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="text-muted small fw-semibold me-1"><i class="bi bi-funnel"></i> Category:</span>
+                        <a href="?category=all{% if selected_status %}&status={{ selected_status }}{% endif %}" class="filter-chip {% if selected_category == 'all' or not selected_category %}active{% endif %}">
+                            <span>All Photos</span>
+                            <span class="chip-badge">{{ all_photo_slots.count }}</span>
+                        </a>
+                        {% for cat, count in categories.items %}
+                            <a href="?category={{ cat }}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="filter-chip {% if selected_category == cat %}active{% endif %}">
+                                <span>{{ cat }}</span>
+                                <span class="chip-badge">{{ count }}</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Photos Grid -->
+                {% if photo_slots %}
+                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4" id="photoCardsGrid">
+                        {% for slot in photo_slots %}
+                            <div class="col photo-grid-item" data-label="{{ slot.raw_label|lower }} {{ slot.normalized_label|lower }} {{ slot.slot_name|lower }}">
+                                <div class="photo-card-pro shadow-xs">
+                                    <div class="photo-media-box" data-bs-toggle="modal" data-bs-target="#photoModal{{ slot.id }}">
+                                        {% if slot.image_relative_path %}
+                                            <img src="{{ MEDIA_URL }}{{ slot.image_relative_path }}" alt="{{ slot.raw_label }}" loading="lazy">
+                                        {% else %}
+                                            <div class="text-center p-4 text-muted">
+                                                <i class="bi bi-image fs-1 opacity-25 d-block mb-1"></i>
+                                                <span class="small">No Image Attached</span>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        <span class="photo-badge-top"><i class="bi bi-file-earmark"></i> Page {{ slot.page_number }}</span>
+                                        <span class="photo-badge-slot" title="{{ slot.slot_name }}">{{ slot.slot_name }}</span>
+                                        {% if slot.width and slot.height %}
+                                            <span class="photo-badge-bottom">{{ slot.width }}&times;{{ slot.height }}</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="p-3 d-flex flex-column flex-grow-1">
+                                        <!-- Label & Category -->
+                                        <div class="mb-2">
+                                            {% if slot.raw_label %}
+                                                <h6 class="fw-bold text-dark mb-1 text-truncate" title="{{ slot.raw_label }}">{{ slot.raw_label }}</h6>
+                                            {% elif slot.is_missing_label %}
+                                                <h6 class="fw-bold text-danger mb-1 fst-italic">[MISSING LABEL]</h6>
+                                            {% else %}
+                                                <h6 class="fw-bold text-muted mb-1 fst-italic">(Unlabeled)</h6>
+                                            {% endif %}
+
+                                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                                {% if slot.normalized_label %}
+                                                    <span class="pill-badge pill-neutral py-0 px-2" style="font-size: 0.7rem;">{{ slot.normalized_label }}</span>
+                                                {% endif %}
+                                                
+                                                {% if slot.is_missing_label %}
+                                                    <span class="pill-badge pill-danger py-0 px-2" style="font-size: 0.7rem;"><i class="bi bi-exclamation-circle-fill"></i> Missing Label</span>
+                                                {% elif slot.status == 'MISSING_PHOTO' %}
+                                                    <span class="pill-badge pill-warning py-0 px-2" style="font-size: 0.7rem;">Missing Photo</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+
+                                        <!-- Image Metrics Footer -->
+                                        <div class="mt-auto pt-2 border-top text-muted small d-flex justify-content-between align-items-center">
+                                            <span>
+                                                {% if slot.blur_score is not None %}
+                                                    <span class="pill-badge {% if slot.is_blurry %}pill-warning{% else %}pill-neutral{% endif %} py-0 px-2" style="font-size: 0.7rem;">
+                                                        Sharpness: {{ slot.blur_score|floatformat:0 }}
+                                                    </span>
+                                                {% endif %}
+                                            </span>
+                                            <button type="button" class="btn btn-sm btn-link text-primary p-0 text-decoration-none fw-semibold" data-bs-toggle="modal" data-bs-target="#photoModal{{ slot.id }}">
+                                                <i class="bi bi-zoom-in"></i> View
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Modal for Enlarged Photo Lightbox -->
+                            <div class="modal fade" id="photoModal{{ slot.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-lg modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow-lg">
+                                        <div class="modal-header bg-dark text-white border-0 py-3">
+                                            <h5 class="modal-title fw-bold fs-6">
+                                                Page {{ slot.page_number }} &bull; {{ slot.slot_name }}: {{ slot.raw_label|default:"(No Label)" }}
+                                            </h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body text-center bg-dark p-3">
+                                            {% if slot.image_relative_path %}
+                                                <img src="{{ MEDIA_URL }}{{ slot.image_relative_path }}" class="img-fluid rounded shadow" alt="{{ slot.raw_label }}" style="max-height: 75vh; object-fit: contain;">
+                                            {% else %}
+                                                <p class="text-white py-5">No photo attached for this slot.</p>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer justify-content-between bg-light border-top">
+                                            <div class="text-muted small">
+                                                Dimensions: <strong>{{ slot.width }}&times;{{ slot.height }}</strong> &bull; 
+                                                Laplacian Sharpness: <strong>{{ slot.blur_score }}</strong> &bull; 
+                                                Brightness: <strong>{{ slot.brightness }}</strong>
+                                            </div>
+                                            {% if slot.image_relative_path %}
+                                                <a href="{{ MEDIA_URL }}{{ slot.image_relative_path }}" class="btn btn-enterprise-primary btn-sm" download>
+                                                    <i class="bi bi-download"></i> Download Photo
+                                                </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="p-5 text-center text-muted">
+                        <i class="bi bi-images fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                        <p class="mb-0">No photos found matching the selected filter criteria.</p>
+                        <a href="?category=all" class="btn btn-outline-primary btn-sm mt-3">Reset Filters</a>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- TAB 2: MISSING LABELS -->
+            <div class="tab-pane fade" id="missing-pane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-dark">Photos Requiring Appraiser Label Inspection</h5>
+                        <p class="text-muted small mb-0">Attached images that lack an identified, corresponding title label on the appraisal form page.</p>
+                    </div>
+                    <span class="pill-badge {% if missing_labels_list.count > 0 %}pill-danger{% else %}pill-success{% endif %} px-3 py-2">
+                        {{ missing_labels_list.count }} Flagged Slots
+                    </span>
+                </div>
+
+                {% if missing_labels_list %}
+                    <div class="table-responsive">
+                        <table class="table-pro">
+                            <thead>
+                                <tr>
+                                    <th>Preview</th>
+                                    <th>Page #</th>
+                                    <th>Slot Name</th>
+                                    <th>Status Issue</th>
+                                    <th>Image Dimensions</th>
+                                    <th>Quality Metrics</th>
+                                    <th>Auditor Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in missing_labels_list %}
+                                    <tr style="background-color: #fffbfa;">
+                                        <td style="width: 90px;">
+                                            {% if item.image_relative_path %}
+                                                <img src="{{ MEDIA_URL }}{{ item.image_relative_path }}" class="rounded border shadow-xs" style="width: 80px; height: 60px; object-fit: cover;">
+                                            {% else %}
+                                                <div class="bg-light text-center rounded border p-2 small text-muted">No Img</div>
+                                            {% endif %}
+                                        </td>
+                                        <td class="fw-bold text-dark">Page {{ item.page_number }}</td>
+                                        <td class="fw-semibold">{{ item.slot_name }}</td>
+                                        <td>
+                                            <span class="pill-badge pill-danger"><i class="bi bi-exclamation-circle-fill"></i> MISSING_LABEL</span>
+                                        </td>
+                                        <td>{{ item.width }} &times; {{ item.height }}</td>
+                                        <td>
+                                            <div class="small fw-semibold">Sharpness: {{ item.blur_score|floatformat:1 }}</div>
+                                            <div class="small text-muted">Brightness: {{ item.brightness|floatformat:1 }}</div>
+                                        </td>
+                                        <td class="text-secondary small">{{ item.verification_note }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="p-5 text-center text-muted">
+                        <div class="rounded-circle p-3 bg-success-subtle text-success d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                            <i class="bi bi-shield-check display-6"></i>
+                        </div>
+                        <h5 class="fw-bold text-success">Clean Audit: No Missing Labels!</h5>
+                        <p class="mb-0">All photos attached to the report have verified, declared text labels.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- TAB 3: BLANK PAGES -->
+            <div class="tab-pane fade" id="blanks-pane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 class="fw-bold mb-1 text-dark">OpenCV Edge & Laplacian Blank Page Detection</h5>
+                        <p class="text-muted small mb-0">Detects completely blank pages, template-header-only blank pages, and low-content forms by stripping standard headers and footers.</p>
+                    </div>
+                    <span class="pill-badge {% if flagged_blanks.count > 0 %}pill-warning{% else %}pill-success{% endif %} px-3 py-2">
+                        {{ flagged_blanks.count }} Blank Pages Detected
+                    </span>
+                </div>
+
+                {% if blank_pages %}
+                    <div class="table-responsive">
+                        <table class="table-pro">
+                            <thead>
+                                <tr>
+                                    <th>Page #</th>
+                                    <th>Thumbnail</th>
+                                    <th>Classification</th>
+                                    <th>Body Content %</th>
+                                    <th>Edge Density %</th>
+                                    <th>Laplacian Texture</th>
+                                    <th>Body Text Blocks</th>
+                                    <th>Header / Form Title</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for bp in blank_pages %}
+                                    <tr class="{% if bp.is_blank %}bg-warning-subtle fw-semibold{% endif %}">
+                                        <td class="fw-bold text-dark">Page {{ bp.page_number }}</td>
+                                        <td style="width: 80px;">
+                                            {% if bp.preview_relative_path %}
+                                                <a href="{{ MEDIA_URL }}{{ bp.preview_relative_path }}" target="_blank">
+                                                    <img src="{{ MEDIA_URL }}{{ bp.preview_relative_path }}" class="rounded border shadow-xs" style="width: 60px; height: 80px; object-fit: cover;">
+                                                </a>
+                                            {% else %}
+                                                <span class="text-muted small">-</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if bp.classification == 'NON_BLANK' %}
+                                                <span class="pill-badge pill-success"><i class="bi bi-check2"></i> NON_BLANK</span>
+                                            {% elif bp.classification == 'COMPLETELY_BLANK' %}
+                                                <span class="pill-badge pill-danger"><i class="bi bi-x-circle-fill"></i> COMPLETELY_BLANK</span>
+                                            {% elif bp.classification == 'TEMPLATE_HEADER_ONLY_BLANK' %}
+                                                <span class="pill-badge pill-warning"><i class="bi bi-layout-text-window-reverse"></i> TEMPLATE_HEADER_ONLY</span>
+                                            {% else %}
+                                                <span class="pill-badge pill-warning">{{ bp.classification }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ bp.content_pixel_pct|floatformat:3 }}%</td>
+                                        <td>{{ bp.edge_density_pct|floatformat:3 }}%</td>
+                                        <td>{{ bp.laplacian_var|floatformat:2 }}</td>
+                                        <td>{{ bp.total_text_lines }} lines</td>
+                                        <td class="text-muted small text-truncate" style="max-width: 250px;" title="{{ bp.sample_header }}">
+                                            {{ bp.sample_header|default:"-" }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="p-5 text-center text-muted">
+                        <i class="bi bi-file-earmark-x fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                        <p class="mb-0">Blank page scanning was not selected for this audit run.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- TAB 4: RAW JSON -->
+            <div class="tab-pane fade" id="json-pane" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0 text-dark">Structured Pipeline Output (JSON)</h5>
+                    {% if audit.json_report %}
+                        <a href="{{ audit.json_report.url }}" class="btn btn-sm btn-outline-primary" download>
+                            <i class="bi bi-download me-1"></i> Download JSON File
+                        </a>
+                    {% endif %}
+                </div>
+                <div class="bg-dark text-light p-3 rounded-3 shadow-xs" style="max-height: 550px; overflow-y: auto;">
+                    <pre class="code-font text-white mb-0" id="jsonViewer">{{ audit.raw_data|pprint }}</pre>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Live client-side search across photo cards
+    const photoSearchInput = document.getElementById('photoSearchInput');
+    if (photoSearchInput) {
+        photoSearchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase().trim();
+            const items = document.querySelectorAll('.photo-grid-item');
+            items.forEach(item => {
+                const searchData = item.getAttribute('data-label') || '';
+                item.style.display = searchData.includes(query) ? '' : 'none';
+            });
+        });
+    }
+</script>
+{% endblock %}

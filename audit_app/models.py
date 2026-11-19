@@ -1,0 +1,122 @@
+from django.db import models
+import os
+
+class ReportAudit(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('PROCESSING', 'Processing'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+    ]
+
+    file_name = models.CharField(max_length=255)
+    original_file = models.FileField(upload_to='uploads/%Y/%m/%d/', blank=True, null=True)
+    report_type = models.CharField(max_length=10, default='XML')
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    error_message = models.TextField(blank=True, null=True)
+    execution_time_seconds = models.FloatField(default=0.0)
+
+    # XML Property metadata
+    property_address = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=50, blank=True, null=True)
+    postal_code = models.CharField(max_length=20, blank=True, null=True)
+    appraiser_name = models.CharField(max_length=150, blank=True, null=True)
+    lender_name = models.CharField(max_length=150, blank=True, null=True)
+    total_rooms = models.IntegerField(blank=True, null=True)
+    total_bedrooms = models.IntegerField(blank=True, null=True)
+    total_bathrooms = models.FloatField(blank=True, null=True)
+    gross_living_area = models.FloatField(blank=True, null=True)
+    appraised_value = models.CharField(max_length=50, blank=True, null=True)
+    mismo_version = models.CharField(max_length=20, blank=True, null=True)
+
+    # Audit statistics
+    total_slots_scanned = models.IntegerField(default=0)
+    labeled_photos_count = models.IntegerField(default=0)
+    missing_label_count = models.IntegerField(default=0)
+    bedroom_photos_identified = models.IntegerField(default=0)
+    bathroom_photos_identified = models.IntegerField(default=0)
+    total_pages_scanned = models.IntegerField(default=0)
+    blank_pages_count = models.IntegerField(default=0)
+
+    # Artifact paths (relative to MEDIA_ROOT)
+    excel_report = models.FileField(upload_to='audit_reports/', blank=True, null=True)
+    json_report = models.FileField(upload_to='audit_reports/', blank=True, null=True)
+    extracted_pdf_path = models.CharField(max_length=500, blank=True, null=True)
+    raw_data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.file_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+
+    @property
+    def bedroom_discrepancy(self):
+        """Returns True if declared bedrooms differs from photo evidence."""
+        if self.total_bedrooms is not None:
+            return self.bedroom_photos_identified != self.total_bedrooms
+        return False
+
+    @property
+    def bathroom_discrepancy(self):
+        """Returns True if declared bathrooms differs from photo evidence."""
+        if self.total_bathrooms is not None:
+            return int(self.bathroom_photos_identified) < int(self.total_bathrooms)
+        return False
+
+
+class AuditPhotoSlot(models.Model):
+    STATUS_CHOICES = [
+        ('LABELED', 'Labeled'),
+        ('MISSING_LABEL', 'Missing Label'),
+        ('MISSING_PHOTO', 'Missing Photo'),
+        ('EMPTY_SLOT', 'Empty Slot'),
+    ]
+
+    report = models.ForeignKey(ReportAudit, on_delete=models.CASCADE, related_name='photo_slots')
+    page_number = models.IntegerField()
+    slot_name = models.CharField(max_length=100)
+    raw_label = models.CharField(max_length=255, blank=True, default='')
+    normalized_label = models.CharField(max_length=100, blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='EMPTY_SLOT')
+    has_image = models.BooleanField(default=False)
+    is_missing_label = models.BooleanField(default=False)
+    
+    # Stored image file path relative to MEDIA_URL
+    image_relative_path = models.CharField(max_length=500, blank=True, null=True)
+    
+    # Image metrics
+    width = models.IntegerField(null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    aspect_ratio = models.FloatField(null=True, blank=True)
+    blur_score = models.FloatField(null=True, blank=True)
+    brightness = models.FloatField(null=True, blank=True)
+    is_blurry = models.BooleanField(default=False)
+    verification_note = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['page_number', 'slot_name']
+
+    def __str__(self):
+        return f"Page {self.page_number} - {self.slot_name} ({self.status})"
+
+
+class AuditBlankPage(models.Model):
+    report = models.ForeignKey(ReportAudit, on_delete=models.CASCADE, related_name='blank_pages')
+    page_number = models.IntegerField()
+    is_blank = models.BooleanField(default=False)
+    classification = models.CharField(max_length=50, default='NON_BLANK')
+    content_pixel_pct = models.FloatField(default=0.0)
+    laplacian_var = models.FloatField(default=0.0)
+    edge_density_pct = models.FloatField(default=0.0)
+    total_text_lines = models.IntegerField(default=0)
+    sample_header = models.TextField(blank=True, default='')
+    preview_relative_path = models.CharField(max_length=500, blank=True, null=True)
+
+    class Meta:
+        ordering = ['page_number']
+
+    def __str__(self):
+        return f"Page {self.page_number} - {self.classification}"

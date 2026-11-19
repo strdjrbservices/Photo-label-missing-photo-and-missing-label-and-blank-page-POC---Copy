@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard & Quality Control - AppraisalGuard{% endblock %}
+
+{% block content %}
+<!-- Top Header / Capabilities -->
+<div class="mb-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pb-3 border-bottom">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <h1 class="h3 fw-bold mb-0 text-dark">Appraisal Quality Control & Computer Vision Audit</h1>
+                <span class="pill-badge pill-primary">v2.1 Enterprise</span>
+            </div>
+            <p class="text-muted mb-0">Automated MISMO XML analysis, photo slot & label extraction, bed/bath reconciliation, and OpenCV blank page detection.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="#audit-form-section" class="btn btn-enterprise-primary d-flex align-items-center gap-2 shadow-sm">
+                <i class="bi bi-cloud-arrow-up-fill"></i> Upload New Report
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="metric-card">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="metric-title">Reports Processed</div>
+                <div class="metric-icon-box" style="background: #eff6ff; color: #1e40af;">
+                    <i class="bi bi-file-earmark-code"></i>
+                </div>
+            </div>
+            <div class="metric-value">{{ stats.total_audits }}</div>
+            <div class="text-muted small mt-2 d-flex align-items-center gap-1">
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 11px;"></i> XML & PDF Reports
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="metric-card">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="metric-title">Photos Extracted</div>
+                <div class="metric-icon-box" style="background: #f0fdfa; color: #0f766e;">
+                    <i class="bi bi-camera"></i>
+                </div>
+            </div>
+            <div class="metric-value">{{ stats.total_photos }}</div>
+            <div class="text-muted small mt-2 d-flex align-items-center gap-1">
+                <i class="bi bi-grid-3x3 text-teal" style="font-size: 11px;"></i> Form & Grid Photo Slots
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="metric-card">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="metric-title">Missing Labels Flagged</div>
+                <div class="metric-icon-box" style="background: #fef2f2; color: #dc2626;">
+                    <i class="bi bi-exclamation-octagon"></i>
+                </div>
+            </div>
+            <div class="metric-value text-danger">{{ stats.total_missing_labels }}</div>
+            <div class="text-muted small mt-2 d-flex align-items-center gap-1">
+                <i class="bi bi-shield-exclamation text-danger" style="font-size: 11px;"></i> QA Defect Flags
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="metric-card">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="metric-title">Blank Pages Flagged</div>
+                <div class="metric-icon-box" style="background: #fffbeb; color: #d97706;">
+                    <i class="bi bi-file-earmark-x"></i>
+                </div>
+            </div>
+            <div class="metric-value text-warning">{{ stats.total_blanks }}</div>
+            <div class="text-muted small mt-2 d-flex align-items-center gap-1">
+                <i class="bi bi-cpu text-warning" style="font-size: 11px;"></i> OpenCV Edge Verified
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Action Area: Upload Card -->
+<div class="row mb-5" id="audit-form-section">
+    <div class="col-12 col-xl-10 mx-auto">
+        <div class="card card-enterprise shadow-sm">
+            <div class="card-header card-header-clean d-flex align-items-center justify-content-between">
+                <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                    <div class="rounded-circle p-2 bg-primary-subtle text-primary d-inline-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+                        <i class="bi bi-cloud-arrow-up-fill fs-6"></i>
+                    </div>
+                    <span>Upload Appraisal Report for Audit</span>
+                </div>
+                <span class="pill-badge pill-primary">MISMO 2.6 XML & PDF</span>
+            </div>
+            <div class="card-body p-4 p-md-5">
+                <form method="post" action="{% url 'audit_create' %}" enctype="multipart/form-data" id="auditForm">
+                    {% csrf_token %}
+
+                    <!-- Upload Dropzone / File Picker -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-dark mb-2">
+                            Select Appraisal Document (.XML or .PDF)
+                        </label>
+                        <div class="p-4 p-md-5 border-2 rounded-3 text-center position-relative" id="dropZone" 
+                             style="cursor: pointer; border: 2px dashed #cbd5e1; background-color: #f8fafc; transition: all 0.2s ease;">
+                            <input type="file" name="report_file" class="position-absolute top-0 start-0 w-100 h-100 opacity-0" id="reportFileInput" accept=".xml,.pdf" style="cursor: pointer;" required>
+                            
+                            <div id="dropZonePrompt">
+                                <div class="rounded-circle bg-white shadow-xs p-3 d-inline-flex align-items-center justify-content-center text-primary mb-3" style="width: 64px; height: 64px;">
+                                    <i class="bi bi-cloud-arrow-up display-6"></i>
+                                </div>
+                                <h5 class="fw-bold text-dark mb-1">Click or drag & drop appraisal file here</h5>
+                                <p class="text-muted small mb-2">Supports MISMO 2.6 XML reports (with embedded PDFs) or standalone appraisal PDFs</p>
+                                <div class="d-flex justify-content-center gap-2">
+                                    <span class="badge bg-light text-secondary border">.XML (MISMO 2.6)</span>
+                                    <span class="badge bg-light text-secondary border">.PDF (Form 1004 / 1025 / 1073 / DLSTRNT)</span>
+                                </div>
+                            </div>
+
+                            <div id="fileSelectedBadge" class="d-none">
+                                <div class="d-inline-flex align-items-center gap-3 p-3 bg-white rounded-3 shadow-xs border">
+                                    <div class="rounded-2 p-2 bg-success-subtle text-success">
+                                        <i class="bi bi-file-earmark-check-fill fs-3"></i>
+                                    </div>
+                                    <div class="text-start">
+                                        <div class="fw-bold text-dark" id="fileNameDisplay">report.xml</div>
+                                        <div class="text-muted small" id="fileSizeDisplay">0 KB</div>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="clearFileBtn" title="Change file">
+                                        <i class="bi bi-arrow-repeat"></i> Change
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% if form.report_file.errors %}
+                            <div class="text-danger small mt-2">
+                                {{ form.report_file.errors }}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Tasks Options -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-dark mb-2">
+                            <i class="bi bi-sliders2 me-1 text-primary"></i> Audit Scope
+                        </label>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="scope-card d-block p-3 rounded-3 border h-100 position-relative" style="cursor: pointer; background: #ffffff;">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <input class="form-check-input mt-1" type="radio" name="tasks" id="taskAll" value="all" checked>
+                                        <div>
+                                            <div class="fw-bold text-dark">Complete Audit</div>
+                                            <div class="text-muted small mt-1">Photos, labels, bed/bath verification & OpenCV blank pages.</div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="scope-card d-block p-3 rounded-3 border h-100 position-relative" style="cursor: pointer; background: #ffffff;">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <input class="form-check-input mt-1" type="radio" name="tasks" id="taskPhotos" value="photos">
+                                        <div>
+                                            <div class="fw-bold text-dark">Photos & Labels Only</div>
+                                            <div class="text-muted small mt-1">Fast mode (~1s): photo slots, labels & missing label check.</div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="scope-card d-block p-3 rounded-3 border h-100 position-relative" style="cursor: pointer; background: #ffffff;">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <input class="form-check-input mt-1" type="radio" name="tasks" id="taskBlank" value="blank">
+                                        <div>
+                                            <div class="fw-bold text-dark">OpenCV Blank Pages</div>
+                                            <div class="text-muted small mt-1">Scans document pages using Laplacian texture & Canny edge density.</div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-enterprise-primary btn-lg w-100 py-3 fw-bold d-flex align-items-center justify-content-center gap-2" id="submitBtn">
+                        <i class="bi bi-play-circle-fill fs-5"></i>
+                        <span>Start Audit & Generate Report</span>
+                    </button>
+                    
+                    <div id="loadingIndicator" class="text-center mt-3 d-none">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted small mt-2">Processing appraisal document and extracting computer vision features...</p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Audits Table -->
+<div class="card card-enterprise shadow-sm mb-5">
+    <div class="card-header card-header-clean d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div class="fw-bold text-dark d-flex align-items-center gap-2">
+            <div class="rounded-circle p-2 bg-primary-subtle text-primary d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                <i class="bi bi-clock-history fs-6"></i>
+            </div>
+            <span>Audit History & Verification Reports</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm" style="max-width: 250px;">
+                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control border-start-0" id="searchAuditsInput" placeholder="Filter reports...">
+            </div>
+            <span class="pill-badge pill-neutral">{{ recent_audits.count }} Reports</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if recent_audits %}
+            <div class="table-responsive">
+                <table class="table-pro" id="auditsTable">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">Report Document & Property</th>
+                            <th>Status</th>
+                            <th>Bed/Bath Reconciliation</th>
+                            <th>Photos Scanned</th>
+                            <th>Missing Labels</th>
+                            <th>Blank Pages</th>
+                            <th>Runtime</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in recent_audits %}
+                            <tr class="audit-row">
+                                <td class="ps-4">
+                                    <a href="{% url 'audit_detail' a.id %}" class="fw-bold text-decoration-none text-dark d-block">
+                                        <i class="bi bi-file-earmark-text text-primary me-1"></i> {{ a.file_name }}
+                                    </a>
+                                    {% if a.property_address %}
+                                        <div class="text-muted small"><i class="bi bi-geo-alt text-danger"></i> {{ a.property_address }}{% if a.city %}, {{ a.city }}{% endif %}</div>
+                                    {% else %}
+                                        <div class="text-muted small code-font">{{ a.created_at|date:"M d, Y H:i" }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if a.status == 'COMPLETED' %}
+                                        <span class="pill-badge pill-success"><i class="bi bi-check-circle-fill"></i> Completed</span>
+                                    {% elif a.status == 'PROCESSING' %}
+                                        <span class="pill-badge pill-warning"><i class="bi bi-arrow-repeat spin"></i> Processing</span>
+                                    {% elif a.status == 'FAILED' %}
+                                        <span class="pill-badge pill-danger"><i class="bi bi-x-circle-fill"></i> Failed</span>
+                                    {% else %}
+                                        <span class="pill-badge pill-neutral">{{ a.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if a.total_bedrooms is not None %}
+                                        <div class="small">
+                                            <span class="fw-semibold">Beds:</span> {{ a.total_bedrooms }} XML &rarr; 
+                                            <span class="pill-badge {% if a.bedroom_discrepancy %}pill-warning{% else %}pill-success{% endif %} py-0 px-2" style="font-size: 0.7rem;">
+                                                {{ a.bedroom_photos_identified }} Photos
+                                            </span>
+                                        </div>
+                                        <div class="small text-muted mt-1">
+                                            <span class="fw-semibold">Baths:</span> {{ a.total_bathrooms|default:"-" }} XML &rarr; {{ a.bathroom_photos_identified }} Photos
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted small">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="fw-bold text-dark">{{ a.total_slots_scanned }}</span>
+                                    <div class="text-muted small">{{ a.labeled_photos_count }} labeled</div>
+                                </td>
+                                <td>
+                                    {% if a.missing_label_count > 0 %}
+                                        <span class="pill-badge pill-danger"><i class="bi bi-exclamation-triangle-fill"></i> {{ a.missing_label_count }} Missing</span>
+                                    {% else %}
+                                        <span class="pill-badge pill-success"><i class="bi bi-check2"></i> 0 (Clean)</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if a.blank_pages_count > 0 %}
+                                        <span class="pill-badge pill-warning"><i class="bi bi-file-earmark-x"></i> {{ a.blank_pages_count }} Blank</span>
+                                    {% else %}
+                                        <span class="pill-badge pill-success"><i class="bi bi-check2"></i> 0 Blank</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="code-font text-muted small">{{ a.execution_time_seconds }}s</span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{% url 'audit_detail' a.id %}" class="btn btn-sm btn-outline-primary" title="View Detailed Report">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% if a.excel_report %}
+                                            <a href="{{ a.excel_report.url }}" class="btn btn-sm btn-outline-success" download title="Download Excel Report">
+                                                <i class="bi bi-file-earmark-spreadsheet"></i>
+                                            </a>
+                                        {% endif %}
+                                        <form method="post" action="{% url 'audit_delete' a.id %}" onsubmit="return confirm('Delete this audit report?');" class="d-inline">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-5 text-center text-muted">
+                <i class="bi bi-clipboard2-check fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                <h5 class="fw-bold text-dark">No Audits Run Yet</h5>
+                <p class="mb-3">Upload an appraisal file above to generate your first audit report.</p>
+                <a href="#audit-form-section" class="btn btn-primary btn-sm px-3">Upload Report</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const fileInput = document.getElementById('reportFileInput');
+    const dropZone = document.getElementById('dropZone');
+    const promptDiv = document.getElementById('dropZonePrompt');
+    const badgeDiv = document.getElementById('fileSelectedBadge');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const fileSizeDisplay = document.getElementById('fileSizeDisplay');
+    const clearFileBtn = document.getElementById('clearFileBtn');
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    fileInput.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+            const file = this.files[0];
+            fileNameDisplay.textContent = file.name;
+            fileSizeDisplay.textContent = formatBytes(file.size);
+            promptDiv.classList.add('d-none');
+            badgeDiv.classList.remove('d-none');
+            dropZone.style.borderColor = '#1e40af';
+            dropZone.style.backgroundColor = '#eff6ff';
+        }
+    });
+
+    if (clearFileBtn) {
+        clearFileBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.value = '';
+            badgeDiv.classList.add('d-none');
+            promptDiv.classList.remove('d-none');
+            dropZone.style.borderColor = '#cbd5e1';
+            dropZone.style.backgroundColor = '#f8fafc';
+        });
+    }
+
+    // Drag and drop feedback
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.style.borderColor = '#2563eb';
+            dropZone.style.backgroundColor = '#eff6ff';
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!fileInput.files.length) {
+                dropZone.style.borderColor = '#cbd5e1';
+                dropZone.style.backgroundColor = '#f8fafc';
+            }
+        }, false);
+    });
+
+    document.getElementById('auditForm').addEventListener('submit', function(e) {
+        if (!fileInput.files || fileInput.files.length === 0) {
+            e.preventDefault();
+            alert("Please select or drop an appraisal report file (.xml or .pdf) to audit.");
+            return;
+        }
+        document.getElementById('submitBtn').classList.add('disabled');
+        document.getElementById('loadingIndicator').classList.remove('d-none');
+    });
+
+    // Client-side quick filter for audits table
+    const searchInput = document.getElementById('searchAuditsInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const q = this.value.toLowerCase().trim();
+            const rows = document.querySelectorAll('#auditsTable tbody tr.audit-row');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(q) ? '' : 'none';
+            });
+        });
+    }
+</script>
+{% endblock %}
