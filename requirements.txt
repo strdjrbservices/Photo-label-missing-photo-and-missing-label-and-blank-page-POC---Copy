@@ -4,7 +4,7 @@ Django>=5.0,<6.1
 # Document & Computer Vision Analysis
 pymupdf>=1.24.0
 opencv-python-headless>=4.9.0.80
-Pillow>=10.0.0
+Pillow>=10.0.0,<11.0.0
 numpy>=1.26.0
 pdfplumber>=0.10.0
 
