@@ -76,6 +76,18 @@
                 <div class="fw-bold text-dark fs-5 mt-1">{{ audit.total_bathrooms|default:"N/A" }}</div>
             </div>
             <div class="col-6 col-md border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;"><i class="bi bi-layers-half text-secondary"></i> Basement Grid</div>
+                <div class="fw-bold text-dark fs-5 mt-1" title="Rec: {{ audit.basement_rr|default:0 }}, Bed: {{ audit.basement_br|default:0 }}, Bath: {{ audit.basement_ba|default:0.0 }}, Other: {{ audit.basement_other|default:0 }}">
+                    {% if audit.basement_rooms_summary %}
+                        {{ audit.basement_rooms_summary }}
+                    {% elif audit.basement_rr is not None %}
+                        {{ audit.basement_rr }}rr {{ audit.basement_br }}br {{ audit.basement_ba }}ba {{ audit.basement_other }}o
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-6 col-md border-end">
                 <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Photo Slots</div>
                 <div class="fw-bold text-primary fs-5 mt-1">{{ audit.total_slots_scanned }} <span class="text-muted fs-6 fw-normal">({{ audit.labeled_photos_count }} labeled)</span></div>
             </div>
@@ -169,7 +181,7 @@
             <i class="bi bi-diagram-3-fill text-primary fs-5"></i>
             <h6 class="fw-bold mb-0 text-dark">Multi-Source Cross-Section Reconciliation</h6>
         </div>
-        <span class="badge bg-light text-secondary border px-2 py-1">GLA &bull; Beds &bull; Baths &bull; Total Rooms</span>
+        <span class="badge bg-light text-secondary border px-2 py-1">GLA &bull; Beds &bull; Baths &bull; Total Rooms &bull; Basement Grid</span>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -316,6 +328,66 @@
                         {% if audit.total_rooms %}
                             <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
                                 <i class="bi bi-check-circle-fill me-1"></i> 3-Way Match
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary px-2 py-1">
+                                N/A
+                            </span>
+                        {% endif %}
+                    </td>
+                </tr>
+
+                <!-- Row 5: Basement Rooms Below Grade (Sales Grid) -->
+                <tr>
+                    <td class="ps-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="p-2 rounded-circle d-inline-flex" style="background-color: #e0f2fe; color: #0284c7;"><i class="bi bi-layers-half fs-6"></i></span>
+                            <div>
+                                <strong class="d-block text-dark">Basement Rooms Below Grade</strong>
+                                <span class="text-muted" style="font-size: 0.75rem;">(rr: Rec &bull; br: Bed &bull; ba: Bath &bull; o: Other)</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-muted">—</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Subgrade / Non-GLA</span>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-dark">
+                            {% if audit.basement_total_sqft or audit.basement_finished_sqft %}
+                                {{ audit.basement_total_sqft|default:0 }} sf / {{ audit.basement_finished_sqft|default:0 }} sfin
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Basement Area</span>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-primary">
+                            {% if audit.basement_rooms_summary %}
+                                {{ audit.basement_rooms_summary }}
+                            {% elif audit.basement_rr is not None %}
+                                {{ audit.basement_rr }}rr {{ audit.basement_br }}br {{ audit.basement_ba }}ba {{ audit.basement_other }}o
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        <span class="text-muted" style="font-size: 0.75rem;">
+                            {% if audit.basement_rr is not None %}
+                                Rec: {{ audit.basement_rr }} &bull; Bed: {{ audit.basement_br }} &bull; Bath: {{ audit.basement_ba }} &bull; Other: {{ audit.basement_other }}
+                            {% else %}
+                                Grid Subject Unit
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-muted">—</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Visual Only</span>
+                    </td>
+                    <td class="text-end pe-4">
+                        {% if audit.basement_rooms_summary or audit.basement_rr is not None %}
+                            <span class="badge bg-info-subtle text-info border border-info px-2 py-1">
+                                <i class="bi bi-check-circle-fill me-1"></i> Grid Verified
                             </span>
                         {% else %}
                             <span class="badge bg-secondary-subtle text-secondary border border-secondary px-2 py-1">

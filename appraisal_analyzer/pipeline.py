@@ -56,7 +56,25 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                             except Exception:
                                 pass
                     if metrics.get("total_rooms"):
-                        break
+                        pass
+
+            # Basement & Finished Rooms Below Grade in Sales Grid
+            if "basement_rr" not in metrics:
+                m_uad = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", text, re.I)
+                if m_uad:
+                    metrics["basement_rr"] = int(m_uad.group(1))
+                    metrics["basement_br"] = int(m_uad.group(2))
+                    try:
+                        metrics["basement_ba"] = float(m_uad.group(3))
+                    except ValueError:
+                        metrics["basement_ba"] = 0.0
+                    metrics["basement_other"] = int(m_uad.group(4))
+                    metrics["basement_rooms_summary"] = f"{m_uad.group(1)}rr {m_uad.group(2)}br {m_uad.group(3)}ba {m_uad.group(4)}o"
+
+                    m_sf = re.search(r"(\d+)\s*sf\s*(\d+)\s*sfin", text, re.I)
+                    if m_sf:
+                        metrics["basement_total_sqft"] = int(m_sf.group(1))
+                        metrics["basement_finished_sqft"] = int(m_sf.group(2))
     except Exception:
         pass
     finally:
@@ -115,6 +133,9 @@ class AppraisalReportPipeline:
                         xml_metadata["total_bathrooms"] = v
                     elif k == "gross_living_area":
                         xml_metadata["gross_living_area"] = v
+                    elif k.startswith("basement_"):
+                        if xml_metadata.get(k) is None:
+                            xml_metadata[k] = v
 
         print(f"[*] Processing Report: {os.path.basename(file_path)}")
         if xml_metadata:
@@ -163,6 +184,13 @@ class AppraisalReportPipeline:
                 "bathrooms": xml_metadata.get("total_bathrooms"),
                 "gross_living_area": xml_metadata.get("gross_living_area"),
                 "appraised_value": xml_metadata.get("appraised_value"),
+                "basement_rr": xml_metadata.get("basement_rr"),
+                "basement_br": xml_metadata.get("basement_br"),
+                "basement_ba": xml_metadata.get("basement_ba"),
+                "basement_other": xml_metadata.get("basement_other"),
+                "basement_total_sqft": xml_metadata.get("basement_total_sqft"),
+                "basement_finished_sqft": xml_metadata.get("basement_finished_sqft"),
+                "basement_rooms_summary": xml_metadata.get("basement_rooms_summary"),
             },
             "findings": {
                 "task1_photo_and_label_inventory": {

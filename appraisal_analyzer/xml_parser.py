@@ -7,6 +7,7 @@ and handles base64 embedded PDF extraction.
 import xml.etree.ElementTree as ET
 import base64
 import os
+import re
 from typing import Dict, Any, Optional, Tuple
 
 
@@ -52,6 +53,13 @@ class XMLAppraisalParser:
             "total_bathrooms": None,
             "gross_living_area": None,
             "appraised_value": None,
+            "basement_rr": None,
+            "basement_br": None,
+            "basement_ba": None,
+            "basement_other": None,
+            "basement_total_sqft": None,
+            "basement_finished_sqft": None,
+            "basement_rooms_summary": None,
             "has_embedded_pdf": False,
             "pdf_bytes": None,
         }
@@ -91,6 +99,38 @@ class XMLAppraisalParser:
             if tag == "VALUATION":
                 if attrib.get("PropertyAppraisedValueAmount"):
                     data["appraised_value"] = attrib.get("PropertyAppraisedValueAmount")
+
+            # Basement below grade rooms from Sales Grid
+            if tag == "COMPARISON_DETAIL":
+                if attrib.get("GSEBelowGradeTotalSquareFeetNumber") is not None and data["basement_total_sqft"] is None:
+                    data["basement_total_sqft"] = safe_int(attrib.get("GSEBelowGradeTotalSquareFeetNumber"))
+                if attrib.get("GSEBelowGradeFinishSquareFeetNumber") is not None and data["basement_finished_sqft"] is None:
+                    data["basement_finished_sqft"] = safe_int(attrib.get("GSEBelowGradeFinishSquareFeetNumber"))
+                if attrib.get("GSEBelowGradeRecreationRoomCount") is not None and data["basement_rr"] is None:
+                    data["basement_rr"] = safe_int(attrib.get("GSEBelowGradeRecreationRoomCount"))
+                    data["basement_br"] = safe_int(attrib.get("GSEBelowGradeBedroomRoomCount"))
+                    data["basement_ba"] = safe_float(attrib.get("GSEBelowGradeBathroomRoomCount"))
+                    data["basement_other"] = safe_int(attrib.get("GSEBelowGradeOtherRoomCount"))
+                    if not data["basement_rooms_summary"]:
+                        data["basement_rooms_summary"] = f"{data['basement_rr']}rr {data['basement_br']}br {data['basement_ba']}ba {data['basement_other']}o"
+            elif tag == "SALE_PRICE_ADJUSTMENT":
+                desc = attrib.get("_Description", "")
+                m = re.search(r"(\d+)rr\s*(\d+)br\s*([\d\.]+)ba\s*(\d+)o", desc, re.I)
+                if m and data["basement_rr"] is None:
+                    data["basement_rr"] = safe_int(m.group(1))
+                    data["basement_br"] = safe_int(m.group(2))
+                    data["basement_ba"] = safe_float(m.group(3))
+                    data["basement_other"] = safe_int(m.group(4))
+                    data["basement_rooms_summary"] = desc.strip()
+                m_sf = re.search(r"(\d+)sf\s*(\d+)sfin", desc, re.I)
+                if m_sf:
+                    if data["basement_total_sqft"] is None:
+                        data["basement_total_sqft"] = safe_int(m_sf.group(1))
+                    if data["basement_finished_sqft"] is None:
+                        data["basement_finished_sqft"] = safe_int(m_sf.group(2))
+            elif tag == "BASEMENT":
+                if attrib.get("SquareFeetCount") and data["basement_total_sqft"] is None:
+                    data["basement_total_sqft"] = safe_int(attrib.get("SquareFeetCount"))
 
             # Embedded PDF
             if tag == "DOCUMENT" and elem.text:

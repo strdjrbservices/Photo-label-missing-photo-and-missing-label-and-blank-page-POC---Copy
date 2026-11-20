@@ -31,6 +31,15 @@ class ReportAudit(models.Model):
     appraised_value = models.CharField(max_length=50, blank=True, null=True)
     mismo_version = models.CharField(max_length=20, blank=True, null=True)
 
+    # Basement Grid Analysis (Rooms Below Grade from Sales Grid)
+    basement_rr = models.IntegerField(blank=True, null=True, verbose_name="Basement Rec Rooms")
+    basement_br = models.IntegerField(blank=True, null=True, verbose_name="Basement Bedrooms")
+    basement_ba = models.FloatField(blank=True, null=True, verbose_name="Basement Bathrooms")
+    basement_other = models.IntegerField(blank=True, null=True, verbose_name="Basement Other Rooms")
+    basement_total_sqft = models.IntegerField(blank=True, null=True, verbose_name="Basement Total Sqft")
+    basement_finished_sqft = models.IntegerField(blank=True, null=True, verbose_name="Basement Finished Sqft")
+    basement_rooms_summary = models.CharField(max_length=100, blank=True, null=True, verbose_name="Basement UAD Summary")
+
     # Audit statistics
     total_slots_scanned = models.IntegerField(default=0)
     labeled_photos_count = models.IntegerField(default=0)

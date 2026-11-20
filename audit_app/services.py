@@ -67,6 +67,15 @@ def run_audit_service(
         audit.gross_living_area = xml_meta.get('gross_living_area')
         audit.appraised_value = str(xml_meta.get('appraised_value')) if xml_meta.get('appraised_value') is not None else None
 
+        # Basement Grid Analysis
+        audit.basement_rr = xml_meta.get('basement_rr')
+        audit.basement_br = xml_meta.get('basement_br')
+        audit.basement_ba = xml_meta.get('basement_ba')
+        audit.basement_other = xml_meta.get('basement_other')
+        audit.basement_total_sqft = xml_meta.get('basement_total_sqft')
+        audit.basement_finished_sqft = xml_meta.get('basement_finished_sqft')
+        audit.basement_rooms_summary = xml_meta.get('basement_rooms_summary')
+
         # Statistics
         p_task = findings.get('task1_photo_and_label_inventory', {})
         m_task = findings.get('task2_missing_photo_labels', {})

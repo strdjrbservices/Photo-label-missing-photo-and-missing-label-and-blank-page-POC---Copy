@@ -141,6 +141,18 @@ class ExcelReportGenerator:
                 f"{xml_meta.get('gross_living_area', 'N/A')} sqft",
             ),
             ("XML Appraised Value", xml_meta.get("appraised_value", "N/A")),
+            (
+                "Basement Rooms Below Grade (Grid)",
+                xml_meta.get("basement_rooms_summary") or (f"{xml_meta.get('basement_rr', 0)}rr {xml_meta.get('basement_br', 0)}br {xml_meta.get('basement_ba', 0)}ba {xml_meta.get('basement_other', 0)}o" if xml_meta.get("basement_rr") is not None else "N/A")
+            ),
+            ("Basement Rec Rooms (rr)", xml_meta.get("basement_rr", "N/A")),
+            ("Basement Bedrooms (br)", xml_meta.get("basement_br", "N/A")),
+            ("Basement Bathrooms (ba)", xml_meta.get("basement_ba", "N/A")),
+            ("Basement Other Rooms (o)", xml_meta.get("basement_other", "N/A")),
+            (
+                "Basement Area (Total / Finished)",
+                f"{xml_meta.get('basement_total_sqft', 'N/A')} sf / {xml_meta.get('basement_finished_sqft', 'N/A')} sfin" if xml_meta.get("basement_total_sqft") else "N/A"
+            ),
         ]
 
         curr_row = 3
