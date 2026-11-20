@@ -245,7 +245,7 @@
                 {% if photo_slots %}
                     <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4" id="photoCardsGrid">
                         {% for slot in photo_slots %}
-                            {% if slot.has_image or (slot.raw_label and slot.raw_label != '[MISSING LABEL]') %}
+                            {% if slot.has_image or slot.raw_label %}
                             <div class="col photo-grid-item" data-label="{{ slot.raw_label|lower }} {{ slot.normalized_label|lower }} {{ slot.slot_name|lower }}">
                                 <div class="photo-card-pro shadow-xs">
                                     <div class="photo-media-box" 
