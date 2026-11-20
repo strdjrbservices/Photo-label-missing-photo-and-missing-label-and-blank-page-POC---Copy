@@ -16,6 +16,55 @@ from .photo_verifier import PhotoVerifier
 from .blank_detector import BlankPageDetector
 
 
+def extract_pdf_form_metrics(pdf_path: str) -> dict:
+    """Extracts finished area room counts (Total Rooms, Beds, Baths, GLA) directly from appraisal form text."""
+    metrics = {}
+    doc = None
+    try:
+        doc = pymupdf.open(pdf_path)
+        for p_idx in range(min(5, len(doc))):
+            page = doc[p_idx]
+            text = page.get_text()
+            if "finished area above grade contains" in text.lower():
+                words = page.get_text("words")
+                y_target = None
+                for w in words:
+                    if "contains:" in w[4].lower():
+                        y_target = w[1]
+                        break
+                if y_target:
+                    lw = [w for w in words if abs(w[1] - y_target) < 6]
+                    lw.sort(key=lambda w: w[0])
+                    for idx, w in enumerate(lw):
+                        wl = w[4].lower()
+                        if wl in ["rooms", "rooms:"] and idx > 0:
+                            v = lw[idx - 1][4].replace(",", "")
+                            if v.isdigit():
+                                metrics["total_rooms"] = int(v)
+                        elif "bedroom" in wl and idx > 0:
+                            v = lw[idx - 1][4].replace(",", "")
+                            if v.isdigit():
+                                metrics["bedrooms"] = int(v)
+                        elif "bath" in wl and idx > 0:
+                            try:
+                                metrics["bathrooms"] = float(lw[idx - 1][4].replace(",", ""))
+                            except Exception:
+                                pass
+                        elif "square" in wl and idx > 0:
+                            try:
+                                metrics["gross_living_area"] = float(lw[idx - 1][4].replace(",", ""))
+                            except Exception:
+                                pass
+                    if metrics.get("total_rooms"):
+                        break
+    except Exception:
+        pass
+    finally:
+        if doc:
+            doc.close()
+    return metrics
+
+
 class AppraisalReportPipeline:
     def __init__(self, use_gpu: bool = False):
         self.use_gpu = use_gpu
@@ -53,13 +102,27 @@ class AppraisalReportPipeline:
                 xml_parser = XMLAppraisalParser(xml_candidate)
                 xml_metadata = xml_parser.metadata
 
+        # Fallback to PDF form text extraction if XML fields are missing
+        if pdf_path and os.path.exists(pdf_path):
+            pdf_form_meta = extract_pdf_form_metrics(pdf_path)
+            for k, v in pdf_form_meta.items():
+                if xml_metadata.get(f"total_{k}") is None and xml_metadata.get(k) is None:
+                    if k == "total_rooms":
+                        xml_metadata["total_rooms"] = v
+                    elif k == "bedrooms":
+                        xml_metadata["total_bedrooms"] = v
+                    elif k == "bathrooms":
+                        xml_metadata["total_bathrooms"] = v
+                    elif k == "gross_living_area":
+                        xml_metadata["gross_living_area"] = v
+
         print(f"[*] Processing Report: {os.path.basename(file_path)}")
         if xml_metadata:
             print(
                 f"    Subject: {xml_metadata.get('property_address')}, {xml_metadata.get('city')}"
             )
             print(
-                f"    XML Declared: Beds={xml_metadata.get('total_bedrooms')}, Baths={xml_metadata.get('total_bathrooms')}, GLA={xml_metadata.get('gross_living_area')} sqft"
+                f"    XML Declared: Rooms={xml_metadata.get('total_rooms')}, Beds={xml_metadata.get('total_bedrooms')}, Baths={xml_metadata.get('total_bathrooms')}, GLA={xml_metadata.get('gross_living_area')} sqft"
             )
 
         # 1 & 2: Photos Analysis
@@ -95,6 +158,7 @@ class AppraisalReportPipeline:
             "xml_property_metadata": {
                 "address": xml_metadata.get("property_address"),
                 "city": xml_metadata.get("city"),
+                "total_rooms": xml_metadata.get("total_rooms"),
                 "bedrooms": xml_metadata.get("total_bedrooms"),
                 "bathrooms": xml_metadata.get("total_bathrooms"),
                 "gross_living_area": xml_metadata.get("gross_living_area"),
@@ -105,6 +169,9 @@ class AppraisalReportPipeline:
                     "total_photo_slots": photo_results["total_slots_scanned"],
                     "labeled_photos_count": photo_results.get(
                         "labeled_photos_count", 0
+                    ),
+                    "total_room_photos_identified": photo_results.get(
+                        "total_room_photos_identified", 0
                     ),
                     "bedroom_photos_identified": photo_results[
                         "bedroom_photos_identified"

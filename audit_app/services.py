@@ -61,6 +61,7 @@ def run_audit_service(
         # Update audit instance with XML metadata
         audit.property_address = xml_meta.get('address')
         audit.city = xml_meta.get('city')
+        audit.total_rooms = xml_meta.get('total_rooms')
         audit.total_bedrooms = xml_meta.get('bedrooms')
         audit.total_bathrooms = xml_meta.get('bathrooms')
         audit.gross_living_area = xml_meta.get('gross_living_area')

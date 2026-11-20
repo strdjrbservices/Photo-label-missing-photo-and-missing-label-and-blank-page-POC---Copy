@@ -553,6 +553,7 @@ class PhotoVerifier:
         all_slots = []
         bedroom_photos = 0
         bathroom_photos = 0
+        total_room_photos = 0
         labeled_photos_count = 0
         missing_label_count = 0
 
@@ -592,8 +593,11 @@ class PhotoVerifier:
                         cat_lower = cat.lower()
                         if "bedroom" in cat_lower or "bed" in cat_lower:
                             bedroom_photos += 1
+                            total_room_photos += 1
                         elif "bathroom" in cat_lower or "bath" in cat_lower:
                             bathroom_photos += 1
+                        elif any(r in cat_lower for r in ["kitchen", "living", "dining", "family", "den", "office", "sunroom"]):
+                            total_room_photos += 1
         finally:
             doc.close()
             if plumber_doc:
@@ -608,6 +612,7 @@ class PhotoVerifier:
             "missing_label_count": missing_label_count,
             "bedroom_photos_identified": bedroom_photos,
             "bathroom_photos_identified": bathroom_photos,
+            "total_room_photos_identified": total_room_photos,
             "extracted_photos_dir": output_dir,
             "slots": all_slots,
         }

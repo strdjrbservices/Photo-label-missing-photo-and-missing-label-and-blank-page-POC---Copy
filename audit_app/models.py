@@ -53,6 +53,24 @@ class ReportAudit(models.Model):
         return f"{self.file_name} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
     @property
+    def room_photos_identified(self):
+        """Count of photos labeled as major living rooms (bedrooms, kitchen, living, dining, family/den)."""
+        count = 0
+        for slot in self.photo_slots.all():
+            if slot.has_image:
+                lbl = (slot.normalized_label or slot.raw_label or '').lower()
+                if any(k in lbl for k in ['bedroom', 'bed', 'kitchen', 'living', 'dining', 'family', 'den', 'office', 'sunroom']):
+                    count += 1
+        return count
+
+    @property
+    def total_rooms_discrepancy(self):
+        """Returns True if declared total rooms differs from photo evidence."""
+        if self.total_rooms is not None:
+            return self.room_photos_identified != self.total_rooms
+        return False
+
+    @property
     def bedroom_discrepancy(self):
         """Returns True if declared bedrooms differs from photo evidence."""
         if self.total_bedrooms is not None:

@@ -133,6 +133,7 @@ class ExcelReportGenerator:
             ),
             ("Subject Address", xml_meta.get("address", "N/A")),
             ("City / State", xml_meta.get("city", "N/A")),
+            ("XML Declared Total Rooms", xml_meta.get("total_rooms", "N/A")),
             ("XML Declared Bedrooms", xml_meta.get("bedrooms", "N/A")),
             ("XML Declared Bathrooms", xml_meta.get("bathrooms", "N/A")),
             (
@@ -176,6 +177,10 @@ class ExcelReportGenerator:
             ("Total Photo Slots Scanned", p_task.get("total_photo_slots", 0)),
             ("Photos with Attached Labels", p_task.get("labeled_photos_count", 0)),
             ("Photos Missing Labels", m_task.get("missing_label_count", 0)),
+            (
+                "Total Rooms Identified in Photo Labels",
+                p_task.get("total_room_photos_identified", p_task.get("bedroom_photos_identified", 0)),
+            ),
             (
                 "Bedrooms Identified in Photo Labels",
                 p_task.get("bedroom_photos_identified", 0),
