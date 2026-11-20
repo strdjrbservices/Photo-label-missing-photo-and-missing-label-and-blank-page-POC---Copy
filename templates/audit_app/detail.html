@@ -247,7 +247,14 @@
                         {% for slot in photo_slots %}
                             <div class="col photo-grid-item" data-label="{{ slot.raw_label|lower }} {{ slot.normalized_label|lower }} {{ slot.slot_name|lower }}">
                                 <div class="photo-card-pro shadow-xs">
-                                    <div class="photo-media-box" data-bs-toggle="modal" data-bs-target="#photoModal{{ slot.id }}">
+                                    <div class="photo-media-box" 
+                                         data-bs-toggle="modal" 
+                                         data-bs-target="#globalPhotoModal"
+                                         data-photo-url="{% if slot.image_relative_path %}{{ MEDIA_URL }}{{ slot.image_relative_path }}{% endif %}"
+                                         data-photo-title="Page {{ slot.page_number }} &bull; {{ slot.slot_name }}: {{ slot.raw_label|default:'(No Label)' }}"
+                                         data-photo-dims="{{ slot.width|default:'-' }}&times;{{ slot.height|default:'-' }}"
+                                         data-photo-blur="{{ slot.blur_score|default:'-' }}"
+                                         data-photo-brightness="{{ slot.brightness|default:'-' }}">
                                         {% if slot.image_relative_path %}
                                             <img src="{{ MEDIA_URL }}{{ slot.image_relative_path }}" alt="{{ slot.raw_label }}" loading="lazy">
                                         {% else %}
@@ -297,47 +304,49 @@
                                                     </span>
                                                 {% endif %}
                                             </span>
-                                            <button type="button" class="btn btn-sm btn-link text-primary p-0 text-decoration-none fw-semibold" data-bs-toggle="modal" data-bs-target="#photoModal{{ slot.id }}">
+                                            <button type="button" class="btn btn-sm btn-link text-primary p-0 text-decoration-none fw-semibold" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#globalPhotoModal"
+                                                    data-photo-url="{% if slot.image_relative_path %}{{ MEDIA_URL }}{{ slot.image_relative_path }}{% endif %}"
+                                                    data-photo-title="Page {{ slot.page_number }} &bull; {{ slot.slot_name }}: {{ slot.raw_label|default:'(No Label)' }}"
+                                                    data-photo-dims="{{ slot.width|default:'-' }}&times;{{ slot.height|default:'-' }}"
+                                                    data-photo-blur="{{ slot.blur_score|default:'-' }}"
+                                                    data-photo-brightness="{{ slot.brightness|default:'-' }}">
                                                 <i class="bi bi-zoom-in"></i> View
                                             </button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        {% endfor %}
+                    </div>
 
-                            <!-- Modal for Enlarged Photo Lightbox -->
-                            <div class="modal fade" id="photoModal{{ slot.id }}" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-lg modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow-lg">
-                                        <div class="modal-header bg-dark text-white border-0 py-3">
-                                            <h5 class="modal-title fw-bold fs-6">
-                                                Page {{ slot.page_number }} &bull; {{ slot.slot_name }}: {{ slot.raw_label|default:"(No Label)" }}
-                                            </h5>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body text-center bg-dark p-3">
-                                            {% if slot.image_relative_path %}
-                                                <img src="{{ MEDIA_URL }}{{ slot.image_relative_path }}" class="img-fluid rounded shadow" alt="{{ slot.raw_label }}" style="max-height: 75vh; object-fit: contain;">
-                                            {% else %}
-                                                <p class="text-white py-5">No photo attached for this slot.</p>
-                                            {% endif %}
-                                        </div>
-                                        <div class="modal-footer justify-content-between bg-light border-top">
-                                            <div class="text-muted small">
-                                                Dimensions: <strong>{{ slot.width }}&times;{{ slot.height }}</strong> &bull; 
-                                                Laplacian Sharpness: <strong>{{ slot.blur_score }}</strong> &bull; 
-                                                Brightness: <strong>{{ slot.brightness }}</strong>
-                                            </div>
-                                            {% if slot.image_relative_path %}
-                                                <a href="{{ MEDIA_URL }}{{ slot.image_relative_path }}" class="btn btn-enterprise-primary btn-sm" download>
-                                                    <i class="bi bi-download"></i> Download Photo
-                                                </a>
-                                            {% endif %}
-                                        </div>
+                    <!-- Single Reusable Modal Lightbox -->
+                    <div class="modal fade" id="globalPhotoModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-centered">
+                            <div class="modal-content border-0 shadow-lg">
+                                <div class="modal-header bg-dark text-white border-0 py-3">
+                                    <h5 class="modal-title fw-bold fs-6" id="globalModalTitle">
+                                        Photo Viewer
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-center bg-dark p-3">
+                                    <img id="globalModalImg" src="" class="img-fluid rounded shadow" alt="Photo" style="max-height: 75vh; object-fit: contain;">
+                                    <p id="globalModalEmptyMsg" class="text-white py-5 d-none">No photo attached for this slot.</p>
+                                </div>
+                                <div class="modal-footer justify-content-between bg-light border-top">
+                                    <div class="text-muted small">
+                                        Dimensions: <strong id="globalModalDims">-</strong> &bull; 
+                                        Sharpness: <strong id="globalModalBlur">-</strong> &bull; 
+                                        Brightness: <strong id="globalModalBrightness">-</strong>
                                     </div>
+                                    <a id="globalModalDownloadBtn" href="#" class="btn btn-enterprise-primary btn-sm" download>
+                                        <i class="bi bi-download"></i> Download Photo
+                                    </a>
                                 </div>
                             </div>
-                        {% endfor %}
+                        </div>
                     </div>
                 {% else %}
                     <div class="p-5 text-center text-muted">
@@ -514,6 +523,42 @@
                 const searchData = item.getAttribute('data-label') || '';
                 item.style.display = searchData.includes(query) ? '' : 'none';
             });
+        });
+    }
+
+    // Dynamic Single Lightbox Modal Populator
+    const globalModal = document.getElementById('globalPhotoModal');
+    if (globalModal) {
+        globalModal.addEventListener('show.bs.modal', function(event) {
+            const trigger = event.relatedTarget;
+            if (!trigger) return;
+            const url = trigger.getAttribute('data-photo-url');
+            const title = trigger.getAttribute('data-photo-title') || 'Photo Viewer';
+            const dims = trigger.getAttribute('data-photo-dims') || '-';
+            const blur = trigger.getAttribute('data-photo-blur') || '-';
+            const brightness = trigger.getAttribute('data-photo-brightness') || '-';
+
+            document.getElementById('globalModalTitle').innerHTML = title;
+            document.getElementById('globalModalDims').textContent = dims;
+            document.getElementById('globalModalBlur').textContent = blur;
+            document.getElementById('globalModalBrightness').textContent = brightness;
+
+            const img = document.getElementById('globalModalImg');
+            const emptyMsg = document.getElementById('globalModalEmptyMsg');
+            const downloadBtn = document.getElementById('globalModalDownloadBtn');
+
+            if (url) {
+                img.src = url;
+                img.classList.remove('d-none');
+                emptyMsg.classList.add('d-none');
+                downloadBtn.href = url;
+                downloadBtn.classList.remove('d-none');
+            } else {
+                img.src = '';
+                img.classList.add('d-none');
+                emptyMsg.classList.remove('d-none');
+                downloadBtn.classList.add('d-none');
+            }
         });
     }
 </script>
