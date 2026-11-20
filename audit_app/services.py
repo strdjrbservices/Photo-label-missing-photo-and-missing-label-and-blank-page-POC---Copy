@@ -110,7 +110,7 @@ def run_audit_service(
             status = s.get('status', 'EMPTY_SLOT')
 
             # Omit empty slots where both image and label are missing
-            if not has_image and (not raw_label or status == 'EMPTY_SLOT'):
+            if not has_image and (not raw_label or raw_label == '[MISSING LABEL]' or status == 'EMPTY_SLOT'):
                 continue
 
             full_photo_path = s.get('photo_path')
