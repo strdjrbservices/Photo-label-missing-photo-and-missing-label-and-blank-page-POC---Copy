@@ -493,14 +493,23 @@ class PhotoVerifier:
                     pix.save(save_full_path)
                     photo_path = os.path.abspath(save_full_path)
 
-                img_bytes = pix.tobytes("png")
-                img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-                img_np = np.array(img_pil)
+                # Fast image quality metrics using direct pixmap buffer (no slow re-encoding)
+                img_np = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.height, pix.width, pix.n))
+                if pix.n >= 3:
+                    gray = cv2.cvtColor(img_np[:, :, :3], cv2.COLOR_RGB2GRAY)
+                else:
+                    gray = img_np
 
-                # Image quality metrics using OpenCV
-                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                blur_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-                mean_brightness = float(np.mean(gray))
+                # Resize if high-res for ultra-fast Laplacian blur & brightness
+                max_dim = max(pix.height, pix.width)
+                if max_dim > 600:
+                    scale = 600.0 / max_dim
+                    eval_gray = cv2.resize(gray, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+                else:
+                    eval_gray = gray
+
+                blur_var = float(cv2.Laplacian(eval_gray, cv2.CV_64F).var())
+                mean_brightness = float(np.mean(eval_gray))
 
                 result["image_quality"] = {
                     "width": img_info["width"],
@@ -546,38 +555,41 @@ class PhotoVerifier:
         labeled_photos_count = 0
         missing_label_count = 0
 
-        for p_idx, page in enumerate(doc):
-            is_photo, title = self.is_photo_page(page)
-            if not is_photo:
-                continue
-
-            slots = self._extract_slots_on_page(page, title)
-            for slot in slots:
-                res = self.verify_photo_slot(
-                    doc, slot, page_num=p_idx + 1, output_dir=output_dir
-                )
-                # If both photo and label are missing, or it's an unused empty slot, omit it
-                if not res.get("has_image") and not res.get("raw_label"):
-                    continue
-                if res.get("status") == "EMPTY_SLOT" and not res.get("has_image"):
+        try:
+            for p_idx, page in enumerate(doc):
+                is_photo, title = self.is_photo_page(page)
+                if not is_photo:
                     continue
 
-                all_slots.append(res)
+                slots = self._extract_slots_on_page(page, title)
+                for slot in slots:
+                    res = self.verify_photo_slot(
+                        doc, slot, page_num=p_idx + 1, output_dir=output_dir
+                    )
+                    # If both photo and label are missing, or it's an unused empty slot, omit it
+                    if not res.get("has_image") and not res.get("raw_label"):
+                        continue
+                    if res.get("status") == "EMPTY_SLOT" and not res.get("has_image"):
+                        continue
 
-                if res.get("is_missing_label"):
-                    missing_label_count += 1
+                    all_slots.append(res)
 
-                if res.get("has_image") and res.get("raw_label"):
-                    labeled_photos_count += 1
+                    if res.get("is_missing_label"):
+                        missing_label_count += 1
 
-                # Count bed & bath photos based on label
-                cat = res.get("normalized_label") or res.get("raw_label")
-                if cat and res.get("has_image"):
-                    cat_lower = cat.lower()
-                    if "bedroom" in cat_lower or "bed" in cat_lower:
-                        bedroom_photos += 1
-                    elif "bathroom" in cat_lower or "bath" in cat_lower:
-                        bathroom_photos += 1
+                    if res.get("has_image") and res.get("raw_label"):
+                        labeled_photos_count += 1
+
+                    # Count bed & bath photos based on label
+                    cat = res.get("normalized_label") or res.get("raw_label")
+                    if cat and res.get("has_image"):
+                        cat_lower = cat.lower()
+                        if "bedroom" in cat_lower or "bed" in cat_lower:
+                            bedroom_photos += 1
+                        elif "bathroom" in cat_lower or "bath" in cat_lower:
+                            bathroom_photos += 1
+        finally:
+            doc.close()
 
         return {
             "total_slots_scanned": len(all_slots),

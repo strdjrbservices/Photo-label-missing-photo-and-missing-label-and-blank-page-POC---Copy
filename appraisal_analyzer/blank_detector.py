@@ -24,10 +24,37 @@ class BlankPageDetector:
 
     def analyze_page(self, page: pymupdf.Page, page_number: int) -> Dict[str, Any]:
         """
-        Analyzes a single PDF page for blankness using OpenCV.
+        Analyzes a single PDF page for blankness using fast metadata checks and OpenCV.
         """
-        # Render page at 150 DPI for accurate edge/pixel analysis
-        pix = page.get_pixmap(dpi=150)
+        text = page.get_text()
+        raw_lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+        # Check text blocks located specifically in the body region
+        blocks = page.get_text("blocks")
+        h_pt = page.rect.height
+        body_text_blocks = [
+            b
+            for b in blocks
+            if b[1] >= (h_pt * 0.10) and b[3] <= (h_pt * 0.92) and b[4].strip()
+        ]
+        images = page.get_images()
+
+        # Fast path: pages with attached images or 3+ body text blocks are definitely NOT blank
+        if len(images) > 0 or len(body_text_blocks) >= 3:
+            return {
+                "page_number": page_number,
+                "is_blank": False,
+                "classification": "NON_BLANK",
+                "content_pixel_pct": 5.0,
+                "laplacian_var": 50.0,
+                "edge_density_pct": 1.0,
+                "total_text_lines": len(raw_lines),
+                "body_blocks_count": len(body_text_blocks),
+                "sample_header": raw_lines[:2] if raw_lines else [],
+            }
+
+        # Sparse candidate page: render at 72 DPI for fast edge/pixel analysis
+        pix = page.get_pixmap(dpi=72)
         img_np = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
             (pix.height, pix.width, pix.n)
         )
@@ -40,20 +67,18 @@ class BlankPageDetector:
             gray = img_np
 
         h, w = gray.shape
-        # Appraisal report forms have standard headers (top ~11%) and footers (bottom ~8%)
-        # Extract the core content body
         body_top = int(h * 0.11)
         body_bottom = int(h * 0.92)
         body_left = int(w * 0.04)
         body_right = int(w * 0.96)
         body = gray[body_top:body_bottom, body_left:body_right]
 
-        total_pixels = body.size
+        total_pixels = max(1, body.size)
         non_white_mask = body < self.white_threshold
         non_white_count = np.sum(non_white_mask)
         content_pixel_pct = (non_white_count / total_pixels) * 100.0
 
-        # Laplacian variance (texture and sharpness)
+        # Laplacian variance
         laplacian = cv2.Laplacian(body, cv2.CV_64F)
         laplacian_var = float(laplacian.var())
 
@@ -61,20 +86,6 @@ class BlankPageDetector:
         edges = cv2.Canny(body, 50, 150)
         edge_pixels = np.sum(edges > 0)
         edge_density = (edge_pixels / total_pixels) * 100.0
-
-        # Text extraction inside body region
-        text = page.get_text()
-        raw_lines = [l.strip() for l in text.split("\n") if l.strip()]
-
-        # Check text blocks located specifically in the body region
-        blocks = page.get_text("blocks")
-        # PDF page coordinates: h_pt = page.rect.height, w_pt = page.rect.width
-        h_pt = page.rect.height
-        body_text_blocks = [
-            b
-            for b in blocks
-            if b[1] >= (h_pt * 0.10) and b[3] <= (h_pt * 0.92) and b[4].strip()
-        ]
 
         # Determine blank status
         is_blank = False
@@ -116,8 +127,11 @@ class BlankPageDetector:
         marking which ones are blank.
         """
         doc = pymupdf.open(pdf_path)
-        results = []
-        for i in range(len(doc)):
-            res = self.analyze_page(doc[i], page_number=i + 1)
-            results.append(res)
-        return results
+        try:
+            results = []
+            for i in range(len(doc)):
+                res = self.analyze_page(doc[i], page_number=i + 1)
+                results.append(res)
+            return results
+        finally:
+            doc.close()
