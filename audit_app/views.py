@@ -95,6 +95,28 @@ def audit_detail_view(request, audit_id):
         if slot.normalized_label:
             categories[slot.normalized_label] = categories.get(slot.normalized_label, 0) + 1
 
+    # Basement Photo Slots & Breakdown
+    basement_keywords = ['basement', 'bsmt', 'cellar', 'lower level', 'rec room', 'recreation room', 'below grade']
+    basement_photos = []
+    basement_bedroom_photos = []
+    basement_bath_photos = []
+    basement_rec_photos = []
+    basement_other_photos = []
+
+    for slot in photo_slots:
+        raw_l = (slot.raw_label or '').lower()
+        norm_l = (slot.normalized_label or '').lower()
+        if any(w in raw_l or w in norm_l for w in basement_keywords):
+            basement_photos.append(slot)
+            if 'bedroom' in raw_l or norm_l == 'bedroom':
+                basement_bedroom_photos.append(slot)
+            elif 'bath' in raw_l or norm_l == 'bathroom':
+                basement_bath_photos.append(slot)
+            elif any(w in raw_l for w in ['rec', 'recreation', 'living', 'family']) or norm_l == 'living room':
+                basement_rec_photos.append(slot)
+            else:
+                basement_other_photos.append(slot)
+
     missing_labels_list = photo_slots.filter(is_missing_label=True)
     flagged_blanks = blank_pages.filter(is_blank=True)
 
@@ -108,6 +130,11 @@ def audit_detail_view(request, audit_id):
         'categories': categories,
         'selected_category': category_filter,
         'selected_status': status_filter,
+        'basement_photos': basement_photos,
+        'basement_bedroom_photos': basement_bedroom_photos,
+        'basement_bath_photos': basement_bath_photos,
+        'basement_rec_photos': basement_rec_photos,
+        'basement_other_photos': basement_other_photos,
     }
     return render(request, 'audit_app/detail.html', context)
 

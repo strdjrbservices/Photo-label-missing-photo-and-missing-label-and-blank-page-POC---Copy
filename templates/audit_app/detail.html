@@ -435,6 +435,13 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold py-3 px-4 d-flex align-items-center gap-2" id="basement-tab" data-bs-toggle="tab" data-bs-target="#basement-pane" type="button" role="tab">
+                    <i class="bi bi-layers-half text-info"></i>
+                    <span>Basement Area & Grid</span>
+                    <span class="pill-badge pill-primary py-0 px-2" style="font-size: 0.72rem;">{{ basement_photos|length }} Photos</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link fw-bold py-3 px-4 d-flex align-items-center gap-2" id="json-tab" data-bs-toggle="tab" data-bs-target="#json-pane" type="button" role="tab">
                     <i class="bi bi-code-slash text-secondary"></i>
                     <span>Raw JSON Data</span>
@@ -740,7 +747,312 @@
                 {% endif %}
             </div>
 
-            <!-- TAB 4: RAW JSON -->
+            <!-- TAB 4: BASEMENT AREA & BELOW GRADE AUDIT -->
+            <div class="tab-pane fade" id="basement-pane" role="tabpanel">
+                <!-- Basement Metrics Overview Card -->
+                <div class="card card-enterprise shadow-xs p-4 mb-4 border-start border-4 border-info">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3 pb-3 border-bottom">
+                        <div>
+                            <span class="text-uppercase small fw-bold text-info" style="letter-spacing: 0.05em;"><i class="bi bi-layers-half me-1"></i> Sales Grid Below Grade Analysis</span>
+                            <h4 class="fw-bold text-dark mb-0 mt-1">Basement Area, Finished Rooms & Photo Verification</h4>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small fw-semibold">UAD Grid String:</span>
+                            <span class="badge bg-primary fs-6 px-3 py-2 font-monospace">{{ audit.basement_rooms_summary|default:"—" }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 6-Metric KPI Grid -->
+                    <div class="row g-3 text-center">
+                        <!-- Total & Finished Sq Ft -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="p-3 rounded-3 bg-light border">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1">Total Area</div>
+                                <div class="fs-4 fw-bold text-dark">
+                                    {% if audit.basement_total_sqft %}{{ audit.basement_total_sqft }} <span class="fs-6 fw-normal text-muted">sf</span>{% else %}—{% endif %}
+                                </div>
+                                <span class="badge bg-secondary-subtle text-secondary small mt-1">Total Subgrade</span>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="p-3 rounded-3 bg-light border">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1">Finished Area</div>
+                                <div class="fs-4 fw-bold text-primary">
+                                    {% if audit.basement_finished_sqft %}{{ audit.basement_finished_sqft }} <span class="fs-6 fw-normal text-muted">sf</span>{% else %}0 <span class="fs-6 fw-normal text-muted">sf</span>{% endif %}
+                                </div>
+                                <span class="badge bg-info-subtle text-info small mt-1">Finished Below</span>
+                            </div>
+                        </div>
+
+                        <!-- Rec Rooms (rr) -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="p-3 rounded-3 bg-light border">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1">Rec Rooms (rr)</div>
+                                <div class="fs-4 fw-bold text-dark">{{ audit.basement_rr|default:0 }}</div>
+                                <span class="text-muted small d-block mt-1">{{ basement_rec_photos|length }} photo(s)</span>
+                            </div>
+                        </div>
+
+                        <!-- Bedrooms (br) -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="p-3 rounded-3 bg-light border">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1">Bedrooms (br)</div>
+                                <div class="fs-4 fw-bold text-dark">{{ audit.basement_br|default:0 }}</div>
+                                <span class="text-muted small d-block mt-1">{{ basement_bedroom_photos|length }} photo(s)</span>
+                            </div>
+                        </div>
+
+                        <!-- Bathrooms (ba) -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="p-3 rounded-3 bg-light border">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1">Bathrooms (ba)</div>
+                                <div class="fs-4 fw-bold text-dark">{{ audit.basement_ba|default:0.0 }}</div>
+                                <span class="text-muted small d-block mt-1">{{ basement_bath_photos|length }} photo(s)</span>
+                            </div>
+                        </div>
+
+                        <!-- Other Rooms (o) -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="p-3 rounded-3 bg-light border">
+                                <div class="text-muted small text-uppercase fw-semibold mb-1">Other Rooms (o)</div>
+                                <div class="fs-4 fw-bold text-dark">{{ audit.basement_other|default:0 }}</div>
+                                <span class="text-muted small d-block mt-1">{{ basement_other_photos|length }} photo(s)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Basement QA Reconciliation Table -->
+                <div class="card card-enterprise shadow-xs mb-4">
+                    <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-check2-circle text-success fs-5"></i>
+                            <h6 class="fw-bold mb-0 text-dark">Basement Grid vs Photo Addendum Cross-Check</h6>
+                        </div>
+                        <span class="badge bg-light text-secondary border px-2 py-1">QA Verification</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light text-secondary small text-uppercase fw-semibold">
+                                <tr>
+                                    <th class="ps-4">Basement Component</th>
+                                    <th>Sales Grid (Subject Unit)</th>
+                                    <th>Photo Addendum Verified</th>
+                                    <th>Variance / Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="small">
+                                <tr>
+                                    <td class="ps-4 fw-semibold text-dark"><i class="bi bi-rulers text-primary me-2"></i>Basement Area (Sq Ft)</td>
+                                    <td>
+                                        <strong>{{ audit.basement_total_sqft|default:0 }} sf</strong> Total &bull; 
+                                        <strong class="text-primary">{{ audit.basement_finished_sqft|default:0 }} sf</strong> Finished
+                                    </td>
+                                    <td>
+                                        {% if basement_photos|length > 0 %}
+                                            <span class="badge bg-success-subtle text-success border border-success">{{ basement_photos|length }} Basement Photos Attached</span>
+                                        {% else %}
+                                            <span class="text-muted">No Basement Photos</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info-subtle text-info border border-info px-2 py-1">
+                                            <i class="bi bi-layers me-1"></i> Form Recorded
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4 fw-semibold text-dark"><i class="bi bi-door-closed text-primary me-2"></i>Basement Bedrooms (br)</td>
+                                    <td><strong>{{ audit.basement_br|default:0 }}</strong> Declared Bedroom(s)</td>
+                                    <td><strong>{{ basement_bedroom_photos|length }}</strong> Photo(s) Attached</td>
+                                    <td>
+                                        {% if audit.basement_br == basement_bedroom_photos|length %}
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                                <i class="bi bi-check-circle-fill me-1"></i> Match
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-warning-subtle text-warning border border-warning px-2 py-1">
+                                                <i class="bi bi-info-circle-fill me-1"></i> {{ audit.basement_br|default:0 }} Declared &bull; {{ basement_bedroom_photos|length }} Photos
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4 fw-semibold text-dark"><i class="bi bi-droplet-half text-info me-2"></i>Basement Bathrooms (ba)</td>
+                                    <td><strong>{{ audit.basement_ba|default:0.0 }}</strong> Declared Bath(s)</td>
+                                    <td><strong>{{ basement_bath_photos|length }}</strong> Photo(s) Attached</td>
+                                    <td>
+                                        {% if audit.basement_ba > 0 and basement_bath_photos|length > 0 %}
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                                <i class="bi bi-check-circle-fill me-1"></i> Photo Confirmed
+                                            </span>
+                                        {% elif audit.basement_ba == 0 and basement_bath_photos|length == 0 %}
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                                <i class="bi bi-check-circle-fill me-1"></i> 0 Declared & 0 Photos
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-warning-subtle text-warning border border-warning px-2 py-1">
+                                                <i class="bi bi-info-circle-fill me-1"></i> {{ audit.basement_ba|default:0.0 }} Declared &bull; {{ basement_bath_photos|length }} Photos
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4 fw-semibold text-dark"><i class="bi bi-tv text-secondary me-2"></i>Recreation Rooms (rr)</td>
+                                    <td><strong>{{ audit.basement_rr|default:0 }}</strong> Declared Rec Room(s)</td>
+                                    <td><strong>{{ basement_rec_photos|length }}</strong> Photo(s) Attached</td>
+                                    <td>
+                                        {% if audit.basement_rr == basement_rec_photos|length %}
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                                <i class="bi bi-check-circle-fill me-1"></i> Match
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-light text-secondary border px-2 py-1">
+                                                {{ audit.basement_rr|default:0 }} Declared &bull; {{ basement_rec_photos|length }} Photos
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4 fw-semibold text-dark"><i class="bi bi-box-seam text-secondary me-2"></i>Other Rooms Below Grade (o)</td>
+                                    <td><strong>{{ audit.basement_other|default:0 }}</strong> Declared Other Room(s)</td>
+                                    <td><strong>{{ basement_other_photos|length }}</strong> Photo(s) Attached</td>
+                                    <td>
+                                        <span class="badge bg-light text-secondary border px-2 py-1">
+                                            {{ basement_other_photos|length }} Photo(s) Attached
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Basement Photo Gallery Section -->
+                <div class="card card-enterprise shadow-xs p-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pb-3 border-bottom">
+                        <div>
+                            <h5 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+                                <i class="bi bi-images text-primary"></i>
+                                <span>Basement Photo Addendum</span>
+                                <span class="badge bg-primary-subtle text-primary border border-primary fs-6">{{ basement_photos|length }}</span>
+                            </h5>
+                            <p class="text-muted small mb-0">Attached appraisal photographs labeled with basement, below-grade, rec room, or subgrade areas.</p>
+                        </div>
+
+                        <!-- Live Search for Basement Photos -->
+                        <div class="input-group input-group-sm" style="max-width: 280px;">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control border-start-0" id="basementPhotoSearchInput" placeholder="Filter basement photos...">
+                        </div>
+                    </div>
+
+                    <!-- Client-Side Filter Chips for Basement Photos -->
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+                        <span class="text-muted small fw-semibold me-1"><i class="bi bi-funnel"></i> Sub-Category:</span>
+                        <button type="button" class="filter-chip active basement-filter-btn" data-filter="all">
+                            <span>All Basement</span>
+                            <span class="chip-badge">{{ basement_photos|length }}</span>
+                        </button>
+                        {% if basement_bedroom_photos|length > 0 %}
+                            <button type="button" class="filter-chip basement-filter-btn" data-filter="bedroom">
+                                <i class="bi bi-door-closed text-primary"></i>
+                                <span>Bedrooms</span>
+                                <span class="chip-badge">{{ basement_bedroom_photos|length }}</span>
+                            </button>
+                        {% endif %}
+                        {% if basement_bath_photos|length > 0 %}
+                            <button type="button" class="filter-chip basement-filter-btn" data-filter="bathroom">
+                                <i class="bi bi-droplet-half text-info"></i>
+                                <span>Bathrooms</span>
+                                <span class="chip-badge">{{ basement_bath_photos|length }}</span>
+                            </button>
+                        {% endif %}
+                        {% if basement_rec_photos|length > 0 %}
+                            <button type="button" class="filter-chip basement-filter-btn" data-filter="rec">
+                                <i class="bi bi-tv text-warning"></i>
+                                <span>Rec / Living</span>
+                                <span class="chip-badge">{{ basement_rec_photos|length }}</span>
+                            </button>
+                        {% endif %}
+                        {% if basement_other_photos|length > 0 %}
+                            <button type="button" class="filter-chip basement-filter-btn" data-filter="other">
+                                <i class="bi bi-box-seam text-secondary"></i>
+                                <span>Utility / Storage / Other</span>
+                                <span class="chip-badge">{{ basement_other_photos|length }}</span>
+                            </button>
+                        {% endif %}
+                    </div>
+
+                    <!-- Basement Photos Grid -->
+                    {% if basement_photos %}
+                        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4" id="basementPhotoCardsGrid">
+                            {% for slot in basement_photos %}
+                                <div class="col basement-grid-item" 
+                                     data-label="{{ slot.raw_label|lower }} {{ slot.normalized_label|lower }} {{ slot.slot_name|lower }}"
+                                     data-subcat="{% if 'bedroom' in slot.raw_label|lower or slot.normalized_label == 'Bedroom' %}bedroom{% elif 'bath' in slot.raw_label|lower or slot.normalized_label == 'Bathroom' %}bathroom{% elif 'rec' in slot.raw_label|lower or 'living' in slot.raw_label|lower or slot.normalized_label == 'Living Room' %}rec{% else %}other{% endif %}">
+                                    <div class="photo-card-pro shadow-xs">
+                                        <div class="photo-media-box" 
+                                             data-bs-toggle="modal" 
+                                             data-bs-target="#globalPhotoModal"
+                                             data-photo-url="{% if slot.image_relative_path %}{{ MEDIA_URL }}{{ slot.image_relative_path }}{% endif %}"
+                                             data-photo-title="Page {{ slot.page_number }} &bull; {{ slot.slot_name }}: {{ slot.raw_label|default:'(No Label)' }}"
+                                             data-photo-dims="{{ slot.width|default:'-' }}&times;{{ slot.height|default:'-' }}"
+                                             data-photo-blur="{{ slot.blur_score|default:'-' }}"
+                                             data-photo-brightness="{{ slot.brightness|default:'-' }}">
+                                            {% if slot.image_relative_path %}
+                                                <img src="{{ MEDIA_URL }}{{ slot.image_relative_path }}" alt="{{ slot.raw_label }}" loading="lazy">
+                                            {% else %}
+                                                <div class="text-center p-4 text-muted">
+                                                    <i class="bi bi-image fs-1 opacity-25 d-block mb-1"></i>
+                                                    <span class="small">No Image Attached</span>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <span class="photo-badge-top"><i class="bi bi-file-earmark"></i> Page {{ slot.page_number }}</span>
+                                            <span class="photo-badge-slot" title="{{ slot.slot_name }}">{{ slot.slot_name }}</span>
+                                            {% if slot.width and slot.height %}
+                                                <span class="photo-badge-bottom">{{ slot.width }}&times;{{ slot.height }}</span>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="p-3 d-flex flex-column flex-grow-1">
+                                            <div class="mb-2">
+                                                <h6 class="fw-bold text-dark mb-1 text-truncate" title="{{ slot.raw_label }}">{{ slot.raw_label|default:'(Unlabeled)' }}</h6>
+                                                <div class="d-flex align-items-center gap-1 flex-wrap">
+                                                    {% if 'bedroom' in slot.raw_label|lower or slot.normalized_label == 'Bedroom' %}
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary px-2"><i class="bi bi-door-closed me-1"></i> Basement Bedroom</span>
+                                                    {% elif 'bath' in slot.raw_label|lower or slot.normalized_label == 'Bathroom' %}
+                                                        <span class="badge bg-info-subtle text-info border border-info px-2"><i class="bi bi-droplet-half me-1"></i> Basement Bathroom</span>
+                                                    {% elif 'rec' in slot.raw_label|lower or 'living' in slot.raw_label|lower or slot.normalized_label == 'Living Room' %}
+                                                        <span class="badge bg-warning-subtle text-warning border border-warning px-2"><i class="bi bi-tv me-1"></i> Rec / Living</span>
+                                                    {% else %}
+                                                        <span class="badge bg-light text-secondary border px-2"><i class="bi bi-layers-half me-1"></i> {{ slot.normalized_label|default:'Basement' }}</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="mt-auto pt-2 border-top d-flex justify-content-between align-items-center text-muted" style="font-size: 0.75rem;">
+                                                <span>Laplacian: <strong class="text-dark">{{ slot.blur_score|default:'N/A' }}</strong></span>
+                                                <span>Brightness: <strong class="text-dark">{{ slot.brightness|default:'N/A' }}</strong></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="p-5 text-center text-muted bg-light rounded-3 border">
+                            <i class="bi bi-layers-half fs-1 text-secondary opacity-50 mb-3 d-block"></i>
+                            <h6 class="fw-bold text-dark">No Basement Photos Identified in Addendum</h6>
+                            <p class="small text-muted mb-0">None of the attached report photo labels explicitly contain basement, cellar, or below-grade keywords.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- TAB 5: RAW JSON -->
             <div class="tab-pane fade" id="json-pane" role="tabpanel">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold mb-0 text-dark">Structured Pipeline Output (JSON)</h5>
@@ -810,5 +1122,38 @@
             }
         });
     }
+
+    // Live search and subcategory filtering for Basement Photos Tab
+    const basementSearch = document.getElementById('basementPhotoSearchInput');
+    const basementFilterBtns = document.querySelectorAll('.basement-filter-btn');
+    const basementItems = document.querySelectorAll('.basement-grid-item');
+
+    let activeBasementSubcat = 'all';
+
+    function applyBasementFilters() {
+        const query = basementSearch ? basementSearch.value.toLowerCase().trim() : '';
+        basementItems.forEach(item => {
+            const labelText = item.getAttribute('data-label') || '';
+            const subcat = item.getAttribute('data-subcat') || 'other';
+
+            const matchesSearch = !query || labelText.includes(query);
+            const matchesSubcat = (activeBasementSubcat === 'all') || (subcat === activeBasementSubcat);
+
+            item.style.display = (matchesSearch && matchesSubcat) ? '' : 'none';
+        });
+    }
+
+    if (basementSearch) {
+        basementSearch.addEventListener('input', applyBasementFilters);
+    }
+
+    basementFilterBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            basementFilterBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            activeBasementSubcat = this.getAttribute('data-filter') || 'all';
+            applyBasementFilters();
+        });
+    });
 </script>
 {% endblock %}
