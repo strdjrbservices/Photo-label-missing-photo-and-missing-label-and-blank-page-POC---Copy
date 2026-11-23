@@ -17,7 +17,10 @@ if _env_file.exists():
                 _line = _line.strip()
                 if _line and not _line.startswith("#") and "=" in _line:
                     _k, _v = _line.split("=", 1)
-                    os.environ.setdefault(_k.strip(), _v.strip().strip("'\""))
+                    _val = _v.strip()
+                    if (_val.startswith('"') and _val.endswith('"')) or (_val.startswith("'") and _val.endswith("'")):
+                        _val = _val[1:-1]
+                    os.environ[_k.strip()] = _val
     except Exception:
         pass
 
