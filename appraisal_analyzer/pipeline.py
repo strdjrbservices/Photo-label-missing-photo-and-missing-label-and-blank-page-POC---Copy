@@ -4,12 +4,16 @@ Main orchestrator that executes appraisal verification tasks:
 1. Extract photos and labels, and identify bedroom & bathroom photos.
 2. Detect missing labels for photos.
 3. Detect blank pages.
+Supports both .XML (MISMO 2.6 with embedded PDF) and direct .PDF appraisal reports.
 """
 
 import os
 import json
 import time
+import re
 from typing import Dict, Any, Optional
+
+import pymupdf
 
 from .xml_parser import XMLAppraisalParser
 from .photo_verifier import PhotoVerifier
@@ -17,16 +21,75 @@ from .blank_detector import BlankPageDetector
 
 
 def extract_pdf_form_metrics(pdf_path: str) -> dict:
-    """Extracts finished area room counts (Total Rooms, Beds, Baths, GLA) directly from appraisal form text."""
-    metrics = {}
+    """Extracts appraisal property metadata, finished area room counts, and basement metrics directly from PDF form text."""
+    metrics = {
+        'property_address': None,
+        'city': None,
+        'state': None,
+        'zip_code': None,
+        'appraised_value': None,
+        'total_rooms': None,
+        'bedrooms': None,
+        'bathrooms': None,
+        'gross_living_area': None,
+        'basement_rr': None,
+        'basement_br': None,
+        'basement_ba': None,
+        'basement_other': None,
+        'basement_total_sqft': None,
+        'basement_finished_sqft': None,
+        'basement_rooms_summary': None
+    }
     doc = None
     try:
         doc = pymupdf.open(pdf_path)
-        for p_idx in range(min(5, len(doc))):
+        for p_idx in range(min(10, len(doc))):
             page = doc[p_idx]
             text = page.get_text()
+            words = page.get_text("words")
+
+            # 1. Property Address, City, State, Zip from URAR page header
+            if not metrics['property_address']:
+                p_word = None
+                for idx, w in enumerate(words):
+                    if w[4].lower() == 'property' and idx + 1 < len(words) and words[idx+1][4].lower().startswith('address'):
+                        p_word = w
+                        break
+                if p_word:
+                    py = p_word[1]
+                    line_words = [w for w in words if abs(w[1] - py) <= 7]
+                    line_words.sort(key=lambda w: w[0])
+                    
+                    addr_tokens = []
+                    city_tokens = []
+                    state_tokens = []
+                    zip_tokens = []
+                    
+                    for w in line_words:
+                        val = w[4].strip()
+                        if val.lower() in ['property', 'address', 'city', 'state', 'zip', 'code', 'file', 'no.', 'no']:
+                            continue
+                        wx = w[0]
+                        if 70 <= wx < 290:
+                            addr_tokens.append(val)
+                        elif 290 <= wx < 450:
+                            city_tokens.append(val)
+                        elif 450 <= wx < 500:
+                            state_tokens.append(val)
+                        elif 500 <= wx <= 585:
+                            zip_tokens.append(val)
+
+                    if addr_tokens:
+                        metrics['property_address'] = " ".join(addr_tokens).strip()
+                    if city_tokens:
+                        metrics['city'] = " ".join(city_tokens).strip()
+                    if state_tokens:
+                        metrics['state'] = " ".join(state_tokens).strip()
+                    if zip_tokens:
+                        metrics['zip_code'] = " ".join(zip_tokens).strip()
+
+            # 2. Finished Area Above Grade: Total Rooms, Bedrooms, Bathrooms, GLA
             if "finished area above grade contains" in text.lower():
-                words = page.get_text("words")
                 y_target = None
                 for w in words:
                     if "contains:" in w[4].lower():
@@ -37,14 +100,10 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                     lw.sort(key=lambda w: w[0])
                     for idx, w in enumerate(lw):
                         wl = w[4].lower()
-                        if wl in ["rooms", "rooms:"] and idx > 0:
-                            v = lw[idx - 1][4].replace(",", "")
-                            if v.isdigit():
-                                metrics["total_rooms"] = int(v)
-                        elif "bedroom" in wl and idx > 0:
-                            v = lw[idx - 1][4].replace(",", "")
-                            if v.isdigit():
-                                metrics["bedrooms"] = int(v)
+                        if wl in ["rooms", "rooms:"] and idx > 0 and lw[idx - 1][4].replace(",", "").isdigit():
+                            metrics["total_rooms"] = int(lw[idx - 1][4].replace(",", ""))
+                        elif "bedroom" in wl and idx > 0 and lw[idx - 1][4].replace(",", "").isdigit():
+                            metrics["bedrooms"] = int(lw[idx - 1][4].replace(",", ""))
                         elif "bath" in wl and idx > 0:
                             try:
                                 metrics["bathrooms"] = float(lw[idx - 1][4].replace(",", ""))
@@ -55,26 +114,103 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                                 metrics["gross_living_area"] = float(lw[idx - 1][4].replace(",", ""))
                             except Exception:
                                 pass
-                    if metrics.get("total_rooms"):
-                        pass
 
-            # Basement & Finished Rooms Below Grade in Sales Grid
-            if "basement_rr" not in metrics:
-                m_uad = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", text, re.I)
-                if m_uad:
-                    metrics["basement_rr"] = int(m_uad.group(1))
-                    metrics["basement_br"] = int(m_uad.group(2))
-                    try:
-                        metrics["basement_ba"] = float(m_uad.group(3))
-                    except ValueError:
-                        metrics["basement_ba"] = 0.0
-                    metrics["basement_other"] = int(m_uad.group(4))
-                    metrics["basement_rooms_summary"] = f"{m_uad.group(1)}rr {m_uad.group(2)}br {m_uad.group(3)}ba {m_uad.group(4)}o"
+            # 3. Sales Comparison Subject Column Extraction for Basement & Room Counts
+            if "sales comparison approach" in text.lower() or "value adjustments" in text.lower():
+                # Scope basement row precisely to the Basement row label on the left (x < 85)
+                b_labels = [w for w in words if w[4].lower().startswith("basement") and w[0] < 85]
+                if not b_labels:
+                    b_labels = [w for w in words if "basement" in w[4].lower() and w[0] < 85]
+                if b_labels:
+                    by = b_labels[0][1]
+                    # Subject column words on this specific row
+                    row_words = [w for w in words if 88 <= w[0] <= 190 and -5 <= (w[1] - by) <= 25]
+                    row_words.sort(key=lambda w: (w[1], w[0]))
+                    row_txt = " ".join(w[4] for w in row_words)
 
-                    m_sf = re.search(r"(\d+)\s*sf\s*(\d+)\s*sfin", text, re.I)
-                    if m_sf:
-                        metrics["basement_total_sqft"] = int(m_sf.group(1))
-                        metrics["basement_finished_sqft"] = int(m_sf.group(2))
+                    # Below Grade UAD counts (rr, br, ba, o)
+                    m_uad = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", row_txt, re.I)
+                    if m_uad and metrics["basement_rr"] is None:
+                        metrics["basement_rr"] = int(m_uad.group(1))
+                        metrics["basement_br"] = int(m_uad.group(2))
+                        try:
+                            metrics["basement_ba"] = float(m_uad.group(3))
+                        except ValueError:
+                            metrics["basement_ba"] = 0.0
+                        metrics["basement_other"] = int(m_uad.group(4))
+                        metrics["basement_rooms_summary"] = f"{m_uad.group(1)}rr {m_uad.group(2)}br {m_uad.group(3)}ba {m_uad.group(4)}o"
+
+                    # Check for 0sf or 0 sf (no basement or 0 finished)
+                    if re.search(r"\b0\s*sf\b", row_txt, re.I) and metrics["basement_total_sqft"] is None:
+                        metrics["basement_total_sqft"] = 0
+                        metrics["basement_finished_sqft"] = 0
+                        if not metrics["basement_rooms_summary"]:
+                            metrics["basement_rooms_summary"] = "0sf (None)"
+                    else:
+                        m_sf = re.search(r"(\d+)\s*sf\s*(\d+)\s*s?f?(?:in|wo|wu)?", row_txt, re.I)
+                        if m_sf and metrics["basement_total_sqft"] is None:
+                            metrics["basement_total_sqft"] = int(m_sf.group(1))
+                            metrics["basement_finished_sqft"] = int(m_sf.group(2))
+                        elif metrics["basement_total_sqft"] is None:
+                            m_sf1 = re.search(r"(\d+)\s*sf", row_txt, re.I)
+                            if m_sf1:
+                                metrics["basement_total_sqft"] = int(m_sf1.group(1))
+
+                # Subject column fallback room counts from subject column if not found earlier
+                subj_words = [w for w in words if 90 <= w[0] <= 188]
+                subj_text = " ".join(w[4] for w in sorted(subj_words, key=lambda w: (w[1], w[0])))
+                if metrics["total_rooms"] is None or metrics["bedrooms"] is None or metrics["gross_living_area"] is None:
+                    m_rc = re.search(r"Total\s+Bdrms\.?\s+Baths\s+(\d+)\s+(\d+)\s+([\d\.]+)", subj_text, re.I)
+                    if m_rc:
+                        metrics["total_rooms"] = int(m_rc.group(1))
+                        metrics["bedrooms"] = int(m_rc.group(2))
+                        metrics["bathrooms"] = float(m_rc.group(3))
+                    m_gla = re.search(r"([\d,]+)\s*sq\.?\s*ft", subj_text, re.I)
+                    if m_gla and metrics["gross_living_area"] is None:
+                        try:
+                            metrics["gross_living_area"] = float(m_gla.group(1).replace(",", ""))
+                        except Exception:
+                            pass
+
+        # 4. Appraised Value extraction across document
+        target_val_keywords = [
+            "appraised value of subject property",
+            "opinion of value",
+            "appraised value:",
+            "indicated value by sales comparison approach",
+            "opinion of the market value",
+            "effective date of this appraisal is",
+            "market value"
+        ]
+        for p_idx in range(min(16, len(doc))):
+            lines = [l.strip() for l in doc[p_idx].get_text().splitlines() if l.strip()]
+            for idx, line in enumerate(lines):
+                line_lower = line.lower()
+                for kw in target_val_keywords:
+                    if kw in line_lower:
+                        m_same = re.search(r'\$?\s*([0-9]{2,3}(?:,[0-9]{3})+)', line)
+                        if m_same and int(m_same.group(1).replace(',', '')) >= 20000:
+                            metrics['appraised_value'] = m_same.group(1).replace(',', '')
+                            break
+                        for next_idx in range(idx + 1, min(len(lines), idx + 4)):
+                            m_next = re.search(r'^\$?\s*([0-9]{2,3}(?:,[0-9]{3})+)$', lines[next_idx])
+                            if m_next and int(m_next.group(1).replace(',', '')) >= 20000:
+                                metrics['appraised_value'] = m_next.group(1).replace(',', '')
+                                break
+                        if metrics['appraised_value']:
+                            break
+                        for prev_idx in range(max(0, idx - 3), idx):
+                            m_prev = re.search(r'^\$?\s*([0-9]{2,3}(?:,[0-9]{3})+)$', lines[prev_idx])
+                            if m_prev and int(m_prev.group(1).replace(',', '')) >= 20000:
+                                metrics['appraised_value'] = m_prev.group(1).replace(',', '')
+                                break
+                    if metrics['appraised_value']:
+                        break
+                if metrics['appraised_value']:
+                    break
+            if metrics['appraised_value']:
+                break
+
     except Exception:
         pass
     finally:
@@ -120,22 +256,29 @@ class AppraisalReportPipeline:
                 xml_parser = XMLAppraisalParser(xml_candidate)
                 xml_metadata = xml_parser.metadata
 
-        # Fallback to PDF form text extraction if XML fields are missing
+        # Extract or fallback to PDF form text extraction
         if pdf_path and os.path.exists(pdf_path):
             pdf_form_meta = extract_pdf_form_metrics(pdf_path)
             for k, v in pdf_form_meta.items():
-                if xml_metadata.get(f"total_{k}") is None and xml_metadata.get(k) is None:
-                    if k == "total_rooms":
+                if v is not None:
+                    if xml_metadata.get(k) is None:
+                        xml_metadata[k] = v
+                    if k == "property_address" and not xml_metadata.get("property_address"):
+                        xml_metadata["property_address"] = v
+                    elif k == "city" and not xml_metadata.get("city"):
+                        xml_metadata["city"] = v
+                    elif k == "appraised_value" and not xml_metadata.get("appraised_value"):
+                        xml_metadata["appraised_value"] = v
+                    elif k == "total_rooms" and not xml_metadata.get("total_rooms"):
                         xml_metadata["total_rooms"] = v
-                    elif k == "bedrooms":
+                    elif k == "bedrooms" and not xml_metadata.get("total_bedrooms"):
                         xml_metadata["total_bedrooms"] = v
-                    elif k == "bathrooms":
+                    elif k == "bathrooms" and not xml_metadata.get("total_bathrooms"):
                         xml_metadata["total_bathrooms"] = v
-                    elif k == "gross_living_area":
+                    elif k == "gross_living_area" and not xml_metadata.get("gross_living_area"):
                         xml_metadata["gross_living_area"] = v
-                    elif k.startswith("basement_"):
-                        if xml_metadata.get(k) is None:
-                            xml_metadata[k] = v
+                    elif k.startswith("basement_") and xml_metadata.get(k) is None:
+                        xml_metadata[k] = v
 
         print(f"[*] Processing Report: {os.path.basename(file_path)}")
         if xml_metadata:
@@ -143,7 +286,7 @@ class AppraisalReportPipeline:
                 f"    Subject: {xml_metadata.get('property_address')}, {xml_metadata.get('city')}"
             )
             print(
-                f"    XML Declared: Rooms={xml_metadata.get('total_rooms')}, Beds={xml_metadata.get('total_bedrooms')}, Baths={xml_metadata.get('total_bathrooms')}, GLA={xml_metadata.get('gross_living_area')} sqft"
+                f"    Declared: Rooms={xml_metadata.get('total_rooms')}, Beds={xml_metadata.get('total_bedrooms') or xml_metadata.get('bedrooms')}, Baths={xml_metadata.get('total_bathrooms') or xml_metadata.get('bathrooms')}, GLA={xml_metadata.get('gross_living_area')} sqft"
             )
 
         # 1 & 2: Photos Analysis
@@ -177,11 +320,13 @@ class AppraisalReportPipeline:
             "pdf_analyzed": os.path.basename(pdf_path),
             "execution_time_seconds": elapsed,
             "xml_property_metadata": {
-                "address": xml_metadata.get("property_address"),
+                "address": xml_metadata.get("property_address") or xml_metadata.get("address"),
                 "city": xml_metadata.get("city"),
+                "state": xml_metadata.get("state"),
+                "zip_code": xml_metadata.get("zip_code"),
                 "total_rooms": xml_metadata.get("total_rooms"),
-                "bedrooms": xml_metadata.get("total_bedrooms"),
-                "bathrooms": xml_metadata.get("total_bathrooms"),
+                "bedrooms": xml_metadata.get("total_bedrooms") or xml_metadata.get("bedrooms"),
+                "bathrooms": xml_metadata.get("total_bathrooms") or xml_metadata.get("bathrooms"),
                 "gross_living_area": xml_metadata.get("gross_living_area"),
                 "appraised_value": xml_metadata.get("appraised_value"),
                 "basement_rr": xml_metadata.get("basement_rr"),

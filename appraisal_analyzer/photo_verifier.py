@@ -35,14 +35,11 @@ class PhotoVerifier:
             "primary bed": "Bedroom",
             "primary bedroom": "Bedroom",
             "master suite": "Bedroom",
-            "primary suite": "Bedroom",
             "guest bedroom": "Bedroom",
             "guest bed": "Bedroom",
-            "guest room": "Bedroom",
-            "bonus room": "Bedroom",
-            "bdr": "Bedroom",
             "bdrm": "Bedroom",
             "bdrms": "Bedroom",
+            "bdr": "Bedroom",
             "br 1": "Bedroom",
             "br 2": "Bedroom",
             "br 3": "Bedroom",
@@ -53,7 +50,6 @@ class PhotoVerifier:
             "br3": "Bedroom",
             "br4": "Bedroom",
             "br5": "Bedroom",
-            "br": "Bedroom",
             "bathroom": "Bathroom",
             "bathrooms": "Bathroom",
             "full bath": "Bathroom",
@@ -74,7 +70,7 @@ class PhotoVerifier:
             "ba 3": "Bathroom",
             "ba1": "Bathroom",
             "ba2": "Bathroom",
-            "ba": "Bathroom",
+            "ba3": "Bathroom",
             "kitchen": "Kitchen",
             "living": "Living Room",
             "dining": "Dining Room",
@@ -127,14 +123,57 @@ class PhotoVerifier:
             "blank": "Blank",
             "left blank intentionally": "Blank",
         }
-        self.bed_regex = re.compile(
-            r'\b(bed|beds|bedroom|bedrooms|bdrm|bdrms|bdr|mbr|master\s*(bed|bedroom|suite)|primary\s*(bed|bedroom|suite)|guest\s*(bed|bedroom|room)|br\s*\d*|br\b)',
-            re.IGNORECASE
-        )
-        self.bath_regex = re.compile(
-            r'\b(bath|baths|bathroom|bathrooms|bth|bths|ba\s*\d*|ba\b|half\s*bath|full\s*bath|powder\s*room|lavatory|restroom|1/2\s*bath|3/4\s*bath)',
-            re.IGNORECASE
-        )
+
+    def _get_page_photos(self, page: pymupdf.Page, xrefs: bool = False) -> List[Dict[str, Any]]:
+        """
+        Extracts photos on a page, automatically assembling sliced horizontal strips
+        (used by ACI PHT6/PHT3 forms) into unified full-photo objects.
+        """
+        H = page.rect.height
+        W = page.rect.width
+        raw_imgs = page.get_image_info(xrefs=xrefs)
+        candidates = [
+            img for img in raw_imgs
+            if img.get("width", 0) >= 100
+            and img.get("bbox", [0, 0, 0, 0])[1] > (0.04 * H)
+            and img.get("bbox", [0, 0, 0, 0])[3] < (0.96 * H)
+        ]
+        regular_imgs = [img for img in candidates if img.get("height", 0) >= 75]
+        strips = [img for img in candidates if img.get("height", 0) < 75]
+        if not strips:
+            return regular_imgs
+
+        groups = []
+        sorted_strips = sorted(strips, key=lambda s: (round(s['bbox'][0]), s['bbox'][1]))
+        for s in sorted_strips:
+            bx0, by0, bx1, by1 = s['bbox']
+            matched = False
+            for g in groups:
+                gx0, gy0, gx1, gy1 = g['bbox']
+                if abs(bx0 - gx0) < 5 and abs(bx1 - gx1) < 5 and abs(by0 - gy1) < 6:
+                    g['bbox'] = (min(gx0, bx0), min(gy0, by0), max(gx1, bx1), max(gy1, by1))
+                    g['strips'].append(s)
+                    matched = True
+                    break
+            if not matched:
+                groups.append({'bbox': (bx0, by0, bx1, by1), 'strips': [s]})
+
+        assembled = []
+        for g in groups:
+            b = g['bbox']
+            h = b[3] - b[1]
+            w = b[2] - b[0]
+            if h >= 75 and w >= 100:
+                first_s = g['strips'][0]
+                assembled.append({
+                    'xref': first_s.get('xref'),
+                    'bbox': b,
+                    'width': int(first_s.get('width', w)),
+                    'height': int(sum(st.get('height', 0) for st in g['strips'])),
+                    'is_assembled_strips': True,
+                    'strip_count': len(g['strips'])
+                })
+        return regular_imgs + assembled
 
     def is_photo_page(self, page: pymupdf.Page) -> Tuple[bool, str]:
         """
@@ -145,40 +184,27 @@ class PhotoVerifier:
         W = page.rect.width
 
         text = page.get_text()
-        first_lines = [l.strip() for l in text.split("\n") if l.strip()][:15]
+        first_lines = [l.strip() for l in text.split("\n") if l.strip()][:12]
         header_text = " ".join(first_lines).lower()
 
         last_lines = [l.strip() for l in text.split("\n") if l.strip()][-6:]
         footer_text = " ".join(last_lines).lower()
 
-        # Fast scan embedded images in body area without xrefs=False
-        img_infos = [
-            img for img in page.get_image_info(xrefs=False)
-            if img["width"] >= 70 and img["height"] >= 60
-            and img["bbox"][1] > (0.01 * H) and img["bbox"][3] < (0.99 * H)
+        # Exclude non-photo attachments, maps, sketches, charts, invoices, and certificates
+        exclude_keywords = [
+            "license", "roster", "e & o", "e&o", "tax record",
+            "form map.loc", "form map.plat", "form map.aerial",
+            "location map", "plat map", "building sketch", "form skt",
+            "flood map", "aerial map", "zoning map", "assessor",
+            "floorplan", "sketch",
+            "analytics addendum", "market conditions addendum",
+            "invoice", "thank you", "qualifications of appraiser"
         ]
+        if any(ex in header_text or ex in footer_text for ex in exclude_keywords):
+            return False, ""
 
-        # Strong photo page indicators in header or footer across all formats (TOTAL, ACI, ClickFORMS, Appraise-It, SFREP)
-        photo_form_codes = [
-            "photo", "photograph", "photos", "photographs", "picpix", "picsix", "picint",
-            "pht6", "pht3", "pht12", "phtc", "phtr", "dlstrnt", "form dlst", "form pic",
-            "subject photo", "subject photos", "interior photo", "interior photos",
-            "exterior photo", "exterior photos", "comparable photo", "comparable photos",
-            "comparable sale", "comparable rental", "listing photo", "inspection photo",
-            "condo photo", "condominium photo", "unit photo", "common element"
-        ]
-        has_photo_indicator = any(k in header_text or k in footer_text for k in photo_form_codes)
-
-        # Exclude non-photo attachments ONLY when there is NO photo indicator in header/footer
-        if not has_photo_indicator:
-            exclude_titles = [
-                "location map", "plat map", "building sketch", "flood map", "aerial map",
-                "zoning map", "analytics addendum", "market conditions addendum",
-                "invoice", "thank you", "qualifications of appraiser",
-                "state certification", "license certificate", "appraiser license"
-            ]
-            if any(ex in header_text for ex in exclude_titles):
-                return False, ""
+        # Fast scan embedded images in body area (supporting regular photos & assembled strips)
+        img_infos = self._get_page_photos(page, xrefs=False)
 
         # Rule 1: 2 or more real photos in body area -> Guaranteed photo page across all appraisal formats!
         if len(img_infos) >= 2:
@@ -186,18 +212,15 @@ class PhotoVerifier:
             for l in first_lines:
                 if any(w in l.lower() for w in [
                     "photo", "photograph", "addendum", "interior", "comparable",
-                    "subject", "listing", "rental", "inspection", "condo", "unit"
+                    "subject", "listing", "rental", "inspection"
                 ]):
                     title = l
                     break
             return True, title
 
-        # Rule 2: 1 photo with photo indicator or large cover photo
+        # Rule 2: 1 large photo on Cover Page or Subject Photo Addendum
         if len(img_infos) == 1:
             im = img_infos[0]
-            if has_photo_indicator:
-                title = first_lines[0] if first_lines else "Subject Photo"
-                return True, title
             if (im["width"] >= 200 and im["height"] >= 180) or (im["bbox"][3] - im["bbox"][1] > 0.20 * H):
                 if any(k in header_text or k in footer_text for k in [
                     "ga1", "appraisal of real property", "cover", "subject photo",
@@ -205,19 +228,22 @@ class PhotoVerifier:
                 ]):
                     return True, "Subject Property (Cover / Photo)"
 
-        # Rule 3: Form code or photo indicator detected
-        if has_photo_indicator:
-            # Fallback if get_image_info(xrefs=False) missed XObject images
-            if len(page.get_images()) >= 1:
-                title = first_lines[0] if first_lines else "Photo Page"
-                for l in first_lines:
-                    if any(w in l.lower() for w in [
-                        "photo", "photograph", "addendum", "interior", "comparable",
-                        "subject", "listing", "rental", "condo", "unit"
-                    ]):
-                        title = l
-                        break
-                return True, title
+        # Rule 3: Known photo form codes in footer or header (TOTAL, ACI, ClickFORMS, Appraise-It)
+        photo_form_codes = [
+            "pht6", "pht3", "pht12", "phtc", "phtr", "picpix", "picsix", "picint",
+            "dlstrnt", "form dlst", "form pic", "photo addendum", "photograph addendum",
+            "interior photos", "comparable photos", "subject photos"
+        ]
+        if any(k in footer_text or k in header_text for k in photo_form_codes):
+            title = first_lines[0] if first_lines else "Photo Page"
+            for l in first_lines:
+                if any(w in l.lower() for w in [
+                    "photo", "photograph", "addendum", "interior", "comparable",
+                    "subject", "listing", "rental"
+                ]):
+                    title = l
+                    break
+            return True, title
 
         return False, ""
 
@@ -236,18 +262,8 @@ class PhotoVerifier:
         H = page.rect.height
         W = page.rect.width
 
-        # Retrieve images on this photo page with xrefs
-        img_infos = [
-            img for img in page.get_image_info(xrefs=True)
-            if img["width"] >= 70 and img["height"] >= 60
-            and img["bbox"][1] > (0.01 * H) and img["bbox"][3] < (0.99 * H)
-        ]
-        if not img_infos:
-            img_infos = [
-                img for img in page.get_image_info(xrefs=False)
-                if img["width"] >= 70 and img["height"] >= 60
-                and img["bbox"][1] > (0.01 * H) and img["bbox"][3] < (0.99 * H)
-            ]
+        # Retrieve images on this photo page with xrefs (assembling strips if present)
+        img_infos = self._get_page_photos(page, xrefs=True)
 
         # Fallback if xref was not attached in get_image_info
         raw_page_imgs = page.get_images()
@@ -335,7 +351,7 @@ class PhotoVerifier:
                 for w in words:
                     wx0, wy0, wx1, wy1, word = w[:5]
                     # Vertical band directly below photo
-                    if (iy1 - 5) <= wy0 <= (iy1 + 85):
+                    if (iy1 - 5) <= wy0 <= (iy1 + 65):
                         if is_two_col:
                             in_col = (wx1 <= x_split) if is_left else (wx0 >= x_split)
                             if in_col:
@@ -365,27 +381,12 @@ class PhotoVerifier:
                     ]
                     label = " ".join(line_words).strip()
 
-                # Block-level fallback directly below photo
-                if not label:
-                    for b in text_blocks:
-                        bx0, by0, bx1, by1, b_text = b[:5]
-                        if (iy1 - 5) <= by0 <= (iy1 + 85):
-                            in_col = (bx1 <= x_split) if is_two_col and is_left else ((bx0 >= x_split) if is_two_col else (ix0 - 30 <= bx0 <= ix1 + 30))
-                            if in_col:
-                                blines = [ln.strip() for ln in b_text.split("\n") if ln.strip()]
-                                for bl in blines:
-                                    if not any(ign in bl.lower() for ign in ["borrower", "lender", "file no", "produced", "aci", "pht6"]):
-                                        label = bl
-                                        break
-                                if label:
-                                    break
-
             # Priority 3: Directly above the image using word-level spatial bounding boxes
             if not label:
                 above_words = []
                 for w in words:
                     wx0, wy0, wx1, wy1, word = w[:5]
-                    if (iy0 - 45) <= wy1 <= (iy0 + 5):
+                    if (iy0 - 35) <= wy1 <= (iy0 + 5):
                         if is_two_col:
                             in_col = (wx1 <= x_split) if is_left else (wx0 >= x_split)
                         else:
@@ -408,21 +409,6 @@ class PhotoVerifier:
                     ]
                     label = " ".join(line_words).strip()
 
-                # Block-level fallback directly above photo
-                if not label:
-                    for b in text_blocks:
-                        bx0, by0, bx1, by1, b_text = b[:5]
-                        if (iy0 - 45) <= by1 <= (iy0 + 5):
-                            in_col = (bx1 <= x_split) if is_two_col and is_left else ((bx0 >= x_split) if is_two_col else (ix0 - 30 <= bx0 <= ix1 + 30))
-                            if in_col:
-                                blines = [ln.strip() for ln in b_text.split("\n") if ln.strip()]
-                                for bl in blines:
-                                    if not any(ign in bl.lower() for ign in ["borrower", "lender", "file no", "produced", "aci", "pht6"]):
-                                        label = bl
-                                        break
-                                if label:
-                                    break
-
             # Priority 4: Secondary fallback with pdfplumber if installed and label still empty
             if not label and plumber_doc is not None:
                 try:
@@ -431,7 +417,7 @@ class PhotoVerifier:
                     c_x0 = 0 if is_left else x_split
                     c_x1 = x_split if is_left else W
                     c_y0 = max(0, iy1 - 5)
-                    c_y1 = min(H, iy1 + 85)
+                    c_y1 = min(H, iy1 + 65)
                     cropped = p_page.crop((c_x0, c_y0, c_x1, c_y1))
                     plumber_text = cropped.extract_text()
                     if plumber_text:
@@ -554,13 +540,23 @@ class PhotoVerifier:
         if has_image:
             photo_path = None
             try:
-                xref = img_info.get("xref")
-                if xref:
-                    pix = pymupdf.Pixmap(doc, xref)
-                    # Convert to standard 24-bit RGB if CMYK, grayscale or has alpha/mask
-                    if pix.n != 3 or pix.alpha != 0:
-                        pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+                pix = None
+                if img_info and img_info.get("is_assembled_strips"):
+                    page_obj = doc[page_num - 1]
+                    b = img_info["bbox"]
+                    clip_rect = pymupdf.Rect(b[0], b[1], b[2], b[3])
+                    pix = page_obj.get_pixmap(clip=clip_rect, dpi=150)
+                else:
+                    xref = img_info.get("xref")
+                    if xref:
+                        pix = pymupdf.Pixmap(doc, xref)
+                        if pix.n != 3 or pix.alpha != 0:
+                            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+                    else:
+                        page_obj = doc[page_num - 1]
+                        pix = page_obj.get_pixmap(clip=pymupdf.Rect(img_info["bbox"]), dpi=150)
 
+                if pix:
                     # Save photo to disk with sanitized filename
                     if output_dir:
                         os.makedirs(output_dir, exist_ok=True)
@@ -572,8 +568,9 @@ class PhotoVerifier:
                             if label
                             else "unlabeled"
                         )
+                        ref_id = img_info.get("xref") or "render"
                         img_name = (
-                            f"p{page_num}_{clean_slot}_{clean_lbl}_xref{xref}.png"
+                            f"p{page_num}_{clean_slot}_{clean_lbl}_{ref_id}.png"
                         )
                         save_full_path = os.path.join(output_dir, img_name)
                         pix.save(save_full_path)
@@ -680,21 +677,15 @@ class PhotoVerifier:
                     if res.get("has_image") and res.get("raw_label"):
                         labeled_photos_count += 1
 
-                    cat = res.get("normalized_label") or ""
-                    raw_text = res.get("raw_label") or ""
-                    combined_text = f"{cat} {raw_text}".strip().lower()
-
-                    if res.get("has_image"):
-                        if self.bed_regex.search(combined_text):
+                    cat = res.get("normalized_label") or res.get("raw_label")
+                    if cat and res.get("has_image"):
+                        cat_lower = cat.lower()
+                        if "bedroom" in cat_lower or "bed" in cat_lower:
                             bedroom_photos += 1
                             total_room_photos += 1
-                            if res.get("normalized_label") != "Bedroom":
-                                res["normalized_label"] = "Bedroom"
-                        elif self.bath_regex.search(combined_text):
+                        elif "bathroom" in cat_lower or "bath" in cat_lower:
                             bathroom_photos += 1
-                            if res.get("normalized_label") != "Bathroom":
-                                res["normalized_label"] = "Bathroom"
-                        elif any(r in combined_text for r in ["kitchen", "living", "dining", "family", "den", "office", "sunroom"]):
+                        elif any(r in cat_lower for r in ["kitchen", "living", "dining", "family", "den", "office", "sunroom"]):
                             total_room_photos += 1
         finally:
             doc.close()

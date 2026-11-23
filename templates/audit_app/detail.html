@@ -68,11 +68,11 @@
                 <div class="fw-bold text-dark fs-5 mt-1">{{ audit.total_rooms|default:"N/A" }}</div>
             </div>
             <div class="col-6 col-md border-end">
-                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Bedrooms (XML)</div>
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Bedrooms ({% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %})</div>
                 <div class="fw-bold text-dark fs-5 mt-1">{{ audit.total_bedrooms|default:"N/A" }}</div>
             </div>
             <div class="col-6 col-md border-end">
-                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Bathrooms (XML)</div>
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">Bathrooms ({% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %})</div>
                 <div class="fw-bold text-dark fs-5 mt-1">{{ audit.total_bathrooms|default:"N/A" }}</div>
             </div>
             <div class="col-6 col-md border-end">
@@ -92,8 +92,8 @@
                 <div class="fw-bold text-primary fs-5 mt-1">{{ audit.total_slots_scanned }} <span class="text-muted fs-6 fw-normal">({{ audit.labeled_photos_count }} labeled)</span></div>
             </div>
             <div class="col-6 col-md">
-                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">MISMO Version</div>
-                <div class="fw-bold text-dark fs-5 mt-1">{{ audit.mismo_version|default:"2.6" }}</div>
+                <div class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.04em;">{% if audit.report_type == 'XML' %}MISMO Version{% else %}Format{% endif %}</div>
+                <div class="fw-bold text-dark fs-5 mt-1">{% if audit.report_type == 'XML' %}{{ audit.mismo_version|default:"2.6" }}{% else %}Standard PDF{% endif %}</div>
             </div>
         </div>
     </div>

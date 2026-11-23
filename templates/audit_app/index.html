@@ -261,13 +261,13 @@
                                 <td>
                                     {% if a.total_bedrooms is not None %}
                                         <div class="small">
-                                            <span class="fw-semibold">Beds:</span> {{ a.total_bedrooms }} {% if a.report_type == 'XML' %}XML{% else %}Form{% endif %} &rarr; 
+                                            <span class="fw-semibold">Beds:</span> {{ a.total_bedrooms }} {% if a.report_type == 'XML' %}XML{% else %}PDF{% endif %} &rarr; 
                                             <span class="pill-badge {% if a.bedroom_discrepancy %}pill-warning{% else %}pill-success{% endif %} py-0 px-2" style="font-size: 0.7rem;">
-                                                {{ a.bedroom_photos_identified }} Photos
+                                                 {{ a.bedroom_photos_identified }} Photos
                                             </span>
                                         </div>
                                         <div class="small text-muted mt-1">
-                                            <span class="fw-semibold">Baths:</span> {{ a.total_bathrooms|default:"-" }} {% if a.report_type == 'XML' %}XML{% else %}Form{% endif %} &rarr; {{ a.bathroom_photos_identified }} Photos
+                                            <span class="fw-semibold">Baths:</span> {{ a.total_bathrooms|default:"-" }} {% if a.report_type == 'XML' %}XML{% else %}PDF{% endif %} &rarr; {{ a.bathroom_photos_identified }} Photos
                                         </div>
                                     {% else %}
                                         <span class="text-muted small">-</span>

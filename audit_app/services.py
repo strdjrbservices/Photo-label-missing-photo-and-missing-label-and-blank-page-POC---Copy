@@ -58,12 +58,14 @@ def run_audit_service(
         photo_details = report_data.get('photo_details', {})
         blank_details = report_data.get('blank_details', [])
 
-        # Update audit instance with XML metadata
-        audit.property_address = xml_meta.get('address')
+        # Update audit instance with XML / PDF metadata
+        audit.property_address = xml_meta.get('address') or xml_meta.get('property_address')
         audit.city = xml_meta.get('city')
+        audit.state = xml_meta.get('state')
+        audit.postal_code = xml_meta.get('zip_code') or xml_meta.get('postal_code')
         audit.total_rooms = xml_meta.get('total_rooms')
-        audit.total_bedrooms = xml_meta.get('bedrooms')
-        audit.total_bathrooms = xml_meta.get('bathrooms')
+        audit.total_bedrooms = xml_meta.get('bedrooms') or xml_meta.get('total_bedrooms')
+        audit.total_bathrooms = xml_meta.get('bathrooms') or xml_meta.get('total_bathrooms')
         audit.gross_living_area = xml_meta.get('gross_living_area')
         audit.appraised_value = str(xml_meta.get('appraised_value')) if xml_meta.get('appraised_value') is not None else None
 
