@@ -96,27 +96,63 @@ def audit_detail_view(request, audit_id):
         if slot.normalized_label:
             categories[slot.normalized_label] = categories.get(slot.normalized_label, 0) + 1
 
-    # Basement Photo Slots & Breakdown
+    # Photo Slots & Breakdown by Group
     basement_keywords = ['basement', 'bsmt', 'cellar', 'lower level', 'rec room', 'recreation room', 'below grade']
     basement_photos = []
     basement_bedroom_photos = []
     basement_bath_photos = []
     basement_rec_photos = []
     basement_other_photos = []
+    bedroom_photos = []
+    bathroom_photos = []
+    total_room_photos = []
 
     for slot in photo_slots:
         raw_l = (slot.raw_label or '').lower()
         norm_l = (slot.normalized_label or '').lower()
-        if any(w in raw_l or w in norm_l for w in basement_keywords):
+        
+        is_bsmt = any(w in raw_l or w in norm_l for w in basement_keywords)
+        is_bed = any(b in raw_l for b in ['bedroom', 'bed', 'bdrm', 'br']) or norm_l == 'bedroom'
+        is_bath = any(b in raw_l for b in ['bath', 'bathroom', 'bth', 'lavatory', 'powder']) or norm_l == 'bathroom'
+        is_rec = any(w in raw_l for w in ['rec', 'recreation', 'playroom']) or (is_bsmt and any(w in raw_l for w in ['living', 'family', 'den']))
+        
+        groups = []
+        
+        if is_bsmt:
             basement_photos.append(slot)
-            if any(b in raw_l for b in ['bedroom', 'bed', 'bdrm', 'br']) or norm_l == 'bedroom':
+            if is_bed:
                 basement_bedroom_photos.append(slot)
-            elif any(b in raw_l for b in ['bath', 'bathroom', 'bth', 'lavatory', 'powder']) or norm_l == 'bathroom':
+                groups.append('basement_br')
+            elif is_bath:
                 basement_bath_photos.append(slot)
-            elif any(w in raw_l for w in ['rec', 'recreation', 'living', 'family', 'den', 'playroom']) or norm_l == 'living room':
+                groups.append('basement_ba')
+            elif is_rec:
                 basement_rec_photos.append(slot)
+                groups.append('basement_rr')
             else:
                 basement_other_photos.append(slot)
+                groups.append('basement_other')
+                
+        if is_bed:
+            bedroom_photos.append(slot)
+            groups.append('bedrooms')
+        if is_bath:
+            bathroom_photos.append(slot)
+            groups.append('bathrooms')
+            
+        # Total rooms check: "in total rroms show all photos except br, ba, basement rr, br and bth"
+        excluded_from_total_rooms = is_bed or is_bath or (is_bsmt and is_rec) or (is_bsmt and is_bed) or (is_bsmt and is_bath)
+        
+        is_room_keyword = any(k in raw_l or k in norm_l for k in [
+            'kitchen', 'living', 'dining', 'family', 'den', 'office', 'sunroom',
+            'foyer', 'hall', 'room', 'area', 'nook', 'great room', 'library', 'bonus', 'loft'
+        ])
+        
+        if not excluded_from_total_rooms and (is_room_keyword or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office']):
+            total_room_photos.append(slot)
+            groups.append('total_rooms')
+            
+        slot.group_tags = " ".join(groups)
 
     missing_labels_list = photo_slots.filter(is_missing_label=True)
     flagged_blanks = blank_pages.filter(is_blank=True)
@@ -131,6 +167,9 @@ def audit_detail_view(request, audit_id):
         'categories': categories,
         'selected_category': category_filter,
         'selected_status': status_filter,
+        'bedroom_photos': bedroom_photos,
+        'bathroom_photos': bathroom_photos,
+        'total_room_photos': total_room_photos,
         'basement_photos': basement_photos,
         'basement_bedroom_photos': basement_bedroom_photos,
         'basement_bath_photos': basement_bath_photos,

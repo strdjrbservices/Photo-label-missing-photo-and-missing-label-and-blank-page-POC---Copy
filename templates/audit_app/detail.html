@@ -3,6 +3,40 @@
 {% block title %}Audit Report: {{ audit.file_name }} - AppraisalGuard{% endblock %}
 
 {% block content %}
+<style>
+    .audit-card-row {
+        transition: all 0.15s ease-in-out;
+        border-radius: 6px;
+        padding-left: 8px;
+        padding-right: 8px;
+        cursor: pointer;
+    }
+    .audit-card-row:hover {
+        background-color: #eff6ff;
+    }
+    .group-photo-badge {
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.15s ease;
+    }
+    .audit-card-row:hover .group-photo-badge {
+        background-color: #0d6efd !important;
+        color: #ffffff !important;
+        border-color: #0d6efd !important;
+    }
+    .group-pill {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.65rem;
+        border-radius: 20px;
+        font-weight: 500;
+        transition: all 0.15s ease;
+    }
+    .group-pill.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+</style>
 <!-- Breadcrumb & Top Bar -->
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb small mb-0">
@@ -115,33 +149,68 @@
                 {% endif %}
             </div>
             <div class="small">
-                <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Total Rooms Declared vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.total_rooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ audit.room_photos_identified }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('total_rooms', 'Total Rooms (Excl. BR, BA, Bsmt RR/BR/BA)')" title="Click to view non-bedroom/non-bathroom room photos">
+                    <span class="text-muted"><i class="bi bi-house-door text-primary me-1"></i>Total Rooms Declared vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.total_rooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ audit.room_photos_identified }} Photos
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Bedrooms Declared vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.total_bedrooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ audit.bedroom_photos_identified }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('bedrooms', 'Bedrooms')" title="Click to view all bedroom photos">
+                    <span class="text-muted"><i class="bi bi-door-closed text-indigo me-1"></i>Bedrooms Declared vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.total_bedrooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ bedroom_photos|length }} Photos
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Bathrooms Declared vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.total_bathrooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ audit.bathroom_photos_identified }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('bathrooms', 'Bathrooms')" title="Click to view all bathroom photos">
+                    <span class="text-muted"><i class="bi bi-water text-info me-1"></i>Bathrooms Declared vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.total_bathrooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ bathroom_photos|length }} Photos
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Basement Rec Rooms (rr) vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.basement_rr|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_rec_photos|length }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('basement_rr', 'Basement Rec Rooms (rr)')" title="Click to view basement recreation room photos">
+                    <span class="text-muted"><i class="bi bi-controller text-success me-1"></i>Basement Rec Rooms (rr) vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.basement_rr|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ basement_rec_photos|length }} Photos
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Basement Bedrooms (br) vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.basement_br|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_bedroom_photos|length }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('basement_br', 'Basement Bedrooms (br)')" title="Click to view basement bedroom photos">
+                    <span class="text-muted"><i class="bi bi-door-open text-warning me-1"></i>Basement Bedrooms (br) vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.basement_br|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ basement_bedroom_photos|length }} Photos
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Basement Bathrooms (ba) vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.basement_ba|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_bath_photos|length }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('basement_ba', 'Basement Bathrooms (ba)')" title="Click to view basement bathroom photos">
+                    <span class="text-muted"><i class="bi bi-droplet-half text-info me-1"></i>Basement Bathrooms (ba) vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.basement_ba|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ basement_bath_photos|length }} Photos
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between py-1">
-                    <span class="text-muted">Basement Other (o) vs Photos:</span>
-                    <span class="fw-bold text-dark">{{ audit.basement_other|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_other_photos|length }} Photos</span>
+                <div class="d-flex justify-content-between align-items-center py-1 audit-card-row" onclick="showGroupPhotos('basement_other', 'Basement Other (o)')" title="Click to view basement other room photos">
+                    <span class="text-muted"><i class="bi bi-grid text-secondary me-1"></i>Basement Other (o) vs Photos:</span>
+                    <div>
+                        <span class="fw-bold text-dark me-1">{{ audit.basement_other|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ basement_other_photos|length }} Photos
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -509,6 +578,46 @@
                             </a>
                         {% endfor %}
                     </div>
+
+                    <!-- Quick Group Filters -->
+                    <div class="d-flex flex-wrap align-items-center gap-1 pt-2 border-top">
+                        <span class="text-muted small fw-semibold me-1"><i class="bi bi-collection"></i> Groups:</span>
+                        <button type="button" class="btn btn-xs btn-outline-secondary group-pill active" id="pill-all" onclick="filterGalleryToGroup('all', 'All Photos')">
+                            All Photos ({{ all_photo_slots.count }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-primary group-pill" id="pill-total_rooms" onclick="filterGalleryToGroup('total_rooms', 'Total Rooms (Excl. BR, BA, Bsmt RR/BR/BA)')" title="Living rooms, kitchens, dining, etc.">
+                            Total Rooms (Non-BR/BA) ({{ total_room_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-primary group-pill" id="pill-bedrooms" onclick="filterGalleryToGroup('bedrooms', 'Bedrooms')">
+                            Bedrooms ({{ bedroom_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-primary group-pill" id="pill-bathrooms" onclick="filterGalleryToGroup('bathrooms', 'Bathrooms')">
+                            Bathrooms ({{ bathroom_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-info group-pill" id="pill-basement_rr" onclick="filterGalleryToGroup('basement_rr', 'Basement Rec Rooms (rr)')">
+                            Bsmt Rec ({{ basement_rec_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-warning group-pill" id="pill-basement_br" onclick="filterGalleryToGroup('basement_br', 'Basement Bedrooms (br)')">
+                            Bsmt Bed ({{ basement_bedroom_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-info group-pill" id="pill-basement_ba" onclick="filterGalleryToGroup('basement_ba', 'Basement Bathrooms (ba)')">
+                            Bsmt Bath ({{ basement_bath_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary group-pill" id="pill-basement_other" onclick="filterGalleryToGroup('basement_other', 'Basement Other (o)')">
+                            Bsmt Other ({{ basement_other_photos|length }})
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Group Filter Notification Banner -->
+                <div id="activeGroupBanner" class="alert alert-primary py-2 px-3 d-flex justify-content-between align-items-center mb-3 d-none shadow-xs">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-funnel-fill text-primary fs-5"></i>
+                        <span>Active Filter: <strong id="activeGroupName">Bedrooms</strong> (<span id="activeGroupCount">0</span> photo(s))</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold" onclick="clearGroupFilter()">
+                        <i class="bi bi-x-circle me-1"></i>Show All Photos
+                    </button>
                 </div>
 
                 <!-- Photos Grid -->
@@ -516,7 +625,7 @@
                     <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4" id="photoCardsGrid">
                         {% for slot in photo_slots %}
                             {% if slot.has_image or slot.raw_label %}
-                            <div class="col photo-grid-item" data-label="{{ slot.raw_label|lower }} {{ slot.normalized_label|lower }} {{ slot.slot_name|lower }}">
+                            <div class="col photo-grid-item" data-groups="{{ slot.group_tags }}" data-label="{{ slot.raw_label|lower }} {{ slot.normalized_label|lower }} {{ slot.slot_name|lower }}">
                                 <div class="photo-card-pro shadow-xs">
                                     <div class="photo-media-box" 
                                          data-bs-toggle="modal" 
@@ -591,6 +700,48 @@
                             </div>
                             {% endif %}
                         {% endfor %}
+                    </div>
+
+                    <!-- Modal: Grouped Photo Evidence -->
+                    <div class="modal fade" id="groupPhotosModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                            <div class="modal-content shadow-lg border-0">
+                                <div class="modal-header bg-primary text-white py-3 px-4">
+                                    <div>
+                                        <h5 class="modal-title fw-bold fs-6 mb-0 d-flex align-items-center gap-2">
+                                            <i class="bi bi-images fs-5"></i>
+                                            <span id="groupModalTitle">Group Photos</span>
+                                            <span class="badge bg-white text-primary fw-bold ms-2" id="groupModalBadge">0 Photos</span>
+                                        </h5>
+                                        <div class="small opacity-75 mt-1" id="groupModalSubtitle">Evidence photos matching selected appraisal room group</div>
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4 bg-light">
+                                    <div id="groupModalSubtitleAlert" class="alert alert-info py-2 px-3 small d-none mb-3 shadow-xs">
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        <span id="groupModalAlertText"></span>
+                                    </div>
+                                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3" id="groupModalGrid">
+                                        <!-- Injected dynamically via JavaScript -->
+                                    </div>
+                                    <div id="groupModalEmptyState" class="text-center py-5 d-none">
+                                        <i class="bi bi-camera-slash fs-1 text-secondary opacity-50 d-block mb-3"></i>
+                                        <h6 class="fw-bold text-dark">No Photos Attached</h6>
+                                        <p class="text-muted small mb-0" id="groupModalEmptyText">No photos found for this room category in the report.</p>
+                                    </div>
+                                </div>
+                                <div class="modal-footer bg-white py-2 px-4 d-flex justify-content-between">
+                                    <span class="text-muted small"><i class="bi bi-lightbulb me-1"></i> Click any photo in the grid to enlarge</span>
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary me-2" data-bs-dismiss="modal">Close</button>
+                                        <button type="button" class="btn btn-sm btn-primary fw-semibold" id="groupModalGalleryBtn" onclick="jumpToGalleryFiltered()">
+                                            <i class="bi bi-grid-3x3-gap me-1"></i>View in Main Gallery Below
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Single Reusable Modal Lightbox -->
@@ -1171,5 +1322,187 @@
             applyBasementFilters();
         });
     });
+
+    // Group-wise Photo Filtering & Interactive Modal
+    let currentActiveGroup = 'all';
+    let currentActiveGroupTitle = 'All Photos';
+
+    function showGroupPhotos(groupKey, groupTitle) {
+        currentActiveGroup = groupKey;
+        currentActiveGroupTitle = groupTitle;
+        
+        const modalEl = document.getElementById('groupPhotosModal');
+        const modalTitleEl = document.getElementById('groupModalTitle');
+        const modalBadgeEl = document.getElementById('groupModalBadge');
+        const alertBox = document.getElementById('groupModalSubtitleAlert');
+        const alertText = document.getElementById('groupModalAlertText');
+        const gridEl = document.getElementById('groupModalGrid');
+        const emptyState = document.getElementById('groupModalEmptyState');
+        const emptyText = document.getElementById('groupModalEmptyText');
+        
+        modalTitleEl.textContent = groupTitle;
+        gridEl.innerHTML = '';
+        
+        if (groupKey === 'total_rooms') {
+            alertBox.classList.remove('d-none');
+            alertText.textContent = "Showing all photos representing living rooms, kitchens, dining rooms, and general living spaces (excluding bedrooms, bathrooms, and basement rr/br/bath).";
+        } else {
+            alertBox.classList.add('d-none');
+        }
+        
+        // Find matching items from photoCardsGrid
+        const allItems = document.querySelectorAll('#photoCardsGrid .photo-grid-item');
+        const matches = [];
+        allItems.forEach(item => {
+            const groups = (item.getAttribute('data-groups') || '').split(' ');
+            if (groups.includes(groupKey)) {
+                matches.push(item);
+            }
+        });
+        
+        modalBadgeEl.textContent = `${matches.length} Photo${matches.length === 1 ? '' : 's'}`;
+        
+        if (matches.length === 0) {
+            emptyState.classList.remove('d-none');
+            emptyText.textContent = `No photo evidence found for ${groupTitle} in this appraisal report.`;
+            gridEl.classList.add('d-none');
+        } else {
+            emptyState.classList.add('d-none');
+            gridEl.classList.remove('d-none');
+            
+            matches.forEach(item => {
+                const mediaBox = item.querySelector('.photo-media-box');
+                const img = item.querySelector('img');
+                const rawHeading = item.querySelector('h6');
+                const rawLabel = rawHeading ? rawHeading.textContent.trim() : (item.getAttribute('data-label') || '');
+                const slotBadge = item.querySelector('.photo-badge-slot');
+                const pageBadge = item.querySelector('.photo-badge-top');
+                const slotText = (pageBadge ? pageBadge.textContent.trim() + ' &bull; ' : '') + (slotBadge ? slotBadge.textContent.trim() : '');
+                const imgSrc = img ? img.getAttribute('src') : '';
+                const photoUrl = mediaBox ? mediaBox.getAttribute('data-photo-url') : imgSrc;
+                const photoTitle = mediaBox ? mediaBox.getAttribute('data-photo-title') : rawLabel;
+                const dims = mediaBox ? mediaBox.getAttribute('data-photo-dims') : '-';
+                const blur = mediaBox ? mediaBox.getAttribute('data-photo-blur') : '-';
+                const brightness = mediaBox ? mediaBox.getAttribute('data-photo-brightness') : '-';
+                
+                const col = document.createElement('div');
+                col.className = 'col';
+                col.innerHTML = `
+                    <div class="card h-100 shadow-xs border-0 rounded-3 overflow-hidden bg-white">
+                        <div style="height: 180px; background: #0f172a; cursor: pointer; position: relative;" 
+                             class="d-flex align-items-center justify-content-center"
+                             onclick="openGlobalPreviewFromGroup('${photoUrl}', '${photoTitle.replace(/'/g, "\\'")}', '${dims}', '${blur}', '${brightness}')">
+                            ${imgSrc ? `<img src="${imgSrc}" style="width: 100%; height: 100%; object-fit: cover;" alt="${rawLabel}">` : `<div class="text-white opacity-50"><i class="bi bi-image fs-1 d-block"></i>No Image</div>`}
+                            <div class="position-absolute bottom-0 end-0 m-2 badge bg-dark bg-opacity-75 small text-white">
+                                <i class="bi bi-arrows-fullscreen me-1"></i>Enlarge
+                            </div>
+                            ${pageBadge ? `<div class="position-absolute top-0 start-0 m-2 badge bg-dark bg-opacity-75 small text-white">${pageBadge.textContent.trim()}</div>` : ''}
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="fw-bold text-dark small text-truncate" title="${rawLabel}">${rawLabel || '(No Label)'}</div>
+                            <div class="text-muted" style="font-size: 0.72rem;">${slotText}</div>
+                        </div>
+                    </div>
+                `;
+                gridEl.appendChild(col);
+            });
+        }
+        
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    function openGlobalPreviewFromGroup(url, title, dims, blur, brightness) {
+        if (!url) return;
+        const globalModalEl = document.getElementById('globalPhotoModal');
+        if (globalModalEl) {
+            document.getElementById('globalModalTitle').innerHTML = title || 'Photo Viewer';
+            document.getElementById('globalModalDims').textContent = dims || '-';
+            document.getElementById('globalModalBlur').textContent = blur || '-';
+            document.getElementById('globalModalBrightness').textContent = brightness || '-';
+            
+            const img = document.getElementById('globalModalImg');
+            const emptyMsg = document.getElementById('globalModalEmptyMsg');
+            const downloadBtn = document.getElementById('globalModalDownloadBtn');
+            
+            img.src = url;
+            img.classList.remove('d-none');
+            emptyMsg.classList.add('d-none');
+            downloadBtn.href = url;
+            downloadBtn.classList.remove('d-none');
+            
+            const modal = new bootstrap.Modal(globalModalEl);
+            modal.show();
+        }
+    }
+
+    function jumpToGalleryFiltered() {
+        const groupModalEl = document.getElementById('groupPhotosModal');
+        const modalInstance = bootstrap.Modal.getInstance(groupModalEl);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+        filterGalleryToGroup(currentActiveGroup, currentActiveGroupTitle);
+    }
+
+    function filterGalleryToGroup(groupKey, groupTitle) {
+        currentActiveGroup = groupKey;
+        currentActiveGroupTitle = groupTitle;
+        
+        // Switch to Photos Tab
+        const photosTabBtn = document.getElementById('photos-tab');
+        if (photosTabBtn) {
+            const tab = new bootstrap.Tab(photosTabBtn);
+            tab.show();
+        }
+        
+        // Filter items in photoCardsGrid
+        const allItems = document.querySelectorAll('#photoCardsGrid .photo-grid-item');
+        let matchCount = 0;
+        allItems.forEach(item => {
+            const groups = (item.getAttribute('data-groups') || '').split(' ');
+            if (groupKey === 'all' || groups.includes(groupKey)) {
+                item.style.display = '';
+                matchCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+        
+        // Update active banner
+        const banner = document.getElementById('activeGroupBanner');
+        const nameEl = document.getElementById('activeGroupName');
+        const countEl = document.getElementById('activeGroupCount');
+        if (banner) {
+            if (groupKey === 'all') {
+                banner.classList.add('d-none');
+            } else {
+                banner.classList.remove('d-none');
+                if (nameEl) nameEl.textContent = groupTitle;
+                if (countEl) countEl.textContent = matchCount;
+            }
+        }
+        
+        // Update quick group pills active state
+        document.querySelectorAll('.group-pill').forEach(btn => {
+            btn.classList.remove('active', 'btn-primary', 'btn-secondary', 'btn-info', 'btn-warning');
+            btn.classList.add('btn-outline-secondary');
+        });
+        const activeBtn = document.getElementById(`pill-${groupKey}`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+            activeBtn.classList.remove('btn-outline-secondary');
+        }
+        
+        // Scroll smoothly to gallery
+        const target = document.getElementById('photos-pane');
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    function clearGroupFilter() {
+        filterGalleryToGroup('all', 'All Photos');
+    }
 </script>
 {% endblock %}
