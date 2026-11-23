@@ -212,13 +212,13 @@
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2">
             <!-- Delete Selected Button -->
-            <button type="button" id="deleteSelectedBtn" class="btn btn-sm btn-danger shadow-xs d-none" onclick="submitBulkDelete()" title="Delete all selected reports">
+            <button type="button" id="deleteSelectedBtn" class="btn btn-sm btn-danger shadow-xs disabled" style="opacity: 0.65; cursor: not-allowed;" onclick="openBulkDeleteModal()" title="Select one or more reports to delete">
                 <i class="bi bi-trash-fill me-1"></i> Delete Selected (<span id="selectedCountBadge">0</span>)
             </button>
             <!-- Clear All Button -->
             {% if recent_audits %}
-            <button type="button" id="clearAllBtn" class="btn btn-sm btn-outline-danger shadow-xs" onclick="confirmClearAll()" title="Clear all audit records">
-                <i class="bi bi-trash3 me-1"></i> Clear All
+            <button type="button" id="clearAllBtn" class="btn btn-sm btn-outline-danger shadow-xs" data-bs-toggle="modal" data-bs-target="#clearAllModal" title="Permanently clear all audit records">
+                <i class="bi bi-trash3-fill me-1"></i> Clear All
             </button>
             {% endif %}
 
@@ -328,12 +328,9 @@
                                                 <i class="bi bi-file-earmark-spreadsheet"></i>
                                             </a>
                                         {% endif %}
-                                        <form method="post" action="{% url 'audit_delete' a.id %}" onsubmit="return confirm('Delete this audit report?');" class="d-inline">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="openSingleDeleteModal('{% url 'audit_delete' a.id %}', '{{ a.file_name|escapejs }}')" title="Permanently Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -349,6 +346,79 @@
                 <a href="#audit-form-section" class="btn btn-primary btn-sm px-3">Upload Report</a>
             </div>
         {% endif %}
+    </div>
+</div>
+
+<!-- Modal: Bulk Delete Selected Reports -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-danger text-white py-3">
+                <h5 class="modal-title fw-bold fs-6"><i class="bi bi-trash-fill me-2"></i>Permanently Delete Selected Reports</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-2">Are you sure you want to permanently delete the <strong id="modalSelectedCount">0</strong> selected audit report(s)?</p>
+                <div class="alert alert-danger py-2 px-3 small mb-0">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i> This will permanently delete the selected database records and all associated photo/report files from disk storage. This cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-danger fw-bold" onclick="executeBulkDelete()"><i class="bi bi-trash-fill me-1"></i>Yes, Permanently Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Clear All Audit Reports -->
+<div class="modal fade" id="clearAllModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-danger text-white py-3">
+                <h5 class="modal-title fw-bold fs-6"><i class="bi bi-trash3-fill me-2"></i>Permanently Clear All Audit Reports</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-2">Are you sure you want to permanently delete <strong>all {{ recent_audits.count }} audit reports</strong> from the system?</p>
+                <div class="alert alert-danger py-2 px-3 small mb-0">
+                    <i class="bi bi-shield-exclamation me-1"></i> Warning: This will permanently erase the entire audit history, all uploaded files, and all extracted photo directories. This action cannot be reversed.
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="{% url 'audit_bulk_delete' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_all">
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold"><i class="bi bi-trash3-fill me-1"></i>Yes, Permanently Clear All</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Single Audit Permanent Deletion -->
+<div class="modal fade" id="singleDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-danger text-white py-3">
+                <h5 class="modal-title fw-bold fs-6"><i class="bi bi-trash-fill me-2"></i>Permanently Delete Audit Report</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-2">Are you sure you want to permanently delete <strong id="singleDeleteFileName" class="text-break">this report</strong>?</p>
+                <div class="alert alert-danger py-2 px-3 small mb-0">
+                    <i class="bi bi-shield-exclamation me-1"></i> Warning: This will permanently erase this audit record and all associated extracted photo files and generated reports from storage. This cannot be undone.
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="singleDeleteForm" method="post" action="" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold"><i class="bi bi-trash-fill me-1"></i>Yes, Permanently Delete</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -451,9 +521,15 @@
         if (badge) badge.textContent = count;
         if (deleteBtn) {
             if (count > 0) {
-                deleteBtn.classList.remove('d-none');
+                deleteBtn.classList.remove('disabled');
+                deleteBtn.removeAttribute('disabled');
+                deleteBtn.style.opacity = '1.0';
+                deleteBtn.style.cursor = 'pointer';
             } else {
-                deleteBtn.classList.add('d-none');
+                deleteBtn.classList.add('disabled');
+                deleteBtn.setAttribute('disabled', 'disabled');
+                deleteBtn.style.opacity = '0.65';
+                deleteBtn.style.cursor = 'not-allowed';
             }
         }
 
@@ -488,40 +564,41 @@
         });
     }
 
-    function submitBulkDelete() {
+    function openBulkDeleteModal() {
         const checked = document.querySelectorAll('.audit-select-check:checked');
         if (checked.length === 0) {
-            alert("Please select at least one audit report to delete.");
+            alert("Please select at least one audit report by checking its box on the left.");
             return;
         }
-        if (confirm(`Are you sure you want to permanently delete the ${checked.length} selected audit report(s)?`)) {
-            const form = document.getElementById('bulkDeleteForm');
-            const container = document.getElementById('bulkSelectedIdsContainer');
-            container.innerHTML = '';
-            document.getElementById('bulkActionInput').value = 'delete_selected';
-            checked.forEach(cb => {
-                const hiddenInput = document.createElement('input');
-                hiddenInput.type = 'hidden';
-                hiddenInput.name = 'selected_ids';
-                hiddenInput.value = cb.value;
-                container.appendChild(hiddenInput);
-            });
-            form.submit();
-        }
+        document.getElementById('modalSelectedCount').textContent = checked.length;
+        const modal = new bootstrap.Modal(document.getElementById('bulkDeleteModal'));
+        modal.show();
     }
 
-    function confirmClearAll() {
-        const total = {{ recent_audits.count|default:0 }};
-        if (total === 0) {
-            alert("No audit reports to clear.");
-            return;
-        }
-        if (confirm(`⚠️ Warning: Are you sure you want to permanently clear ALL ${total} audit report(s)? This action cannot be undone.`)) {
-            const form = document.getElementById('bulkDeleteForm');
-            document.getElementById('bulkActionInput').value = 'clear_all';
-            document.getElementById('bulkSelectedIdsContainer').innerHTML = '';
-            form.submit();
-        }
+    function executeBulkDelete() {
+        const checked = document.querySelectorAll('.audit-select-check:checked');
+        if (checked.length === 0) return;
+        const form = document.getElementById('bulkDeleteForm');
+        const container = document.getElementById('bulkSelectedIdsContainer');
+        container.innerHTML = '';
+        document.getElementById('bulkActionInput').value = 'delete_selected';
+        checked.forEach(cb => {
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'selected_ids';
+            hiddenInput.value = cb.value;
+            container.appendChild(hiddenInput);
+        });
+        form.submit();
+    }
+    function openSingleDeleteModal(actionUrl, fileName) {
+        const modalEl = document.getElementById('singleDeleteModal');
+        const formEl = document.getElementById('singleDeleteForm');
+        const nameEl = document.getElementById('singleDeleteFileName');
+        if (formEl) formEl.action = actionUrl;
+        if (nameEl) nameEl.textContent = fileName || 'this report';
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
     }
 </script>
 {% endblock %}

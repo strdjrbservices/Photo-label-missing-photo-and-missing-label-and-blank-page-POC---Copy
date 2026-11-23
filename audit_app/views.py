@@ -140,39 +140,47 @@ def audit_detail_view(request, audit_id):
     return render(request, 'audit_app/detail.html', context)
 
 
-@require_POST
-def audit_delete_view(request, audit_id):
-    """Deletes a single audit and its media artifacts on disk, then redirects to index."""
-    audit = get_object_or_404(ReportAudit, id=audit_id)
-    fname = audit.file_name
+def _permanently_delete_audit(audit):
+    """Deletes all media files, directories, and the model instance from disk and database."""
     audit_id_str = str(audit.id)
     for sub in ['extracted_photos', 'audit_reports', 'blank_previews']:
         d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
         if os.path.exists(d_path):
             shutil.rmtree(d_path, ignore_errors=True)
+    try:
+        if audit.report_file:
+            audit.report_file.delete(save=False)
+    except Exception:
+        pass
+    try:
+        if audit.excel_report:
+            audit.excel_report.delete(save=False)
+    except Exception:
+        pass
     audit.delete()
-    messages.info(request, f"Audit report for '{fname}' deleted.")
+
+
+def audit_delete_view(request, audit_id):
+    """Deletes a single audit and its media artifacts on disk, then redirects to index."""
+    audit = get_object_or_404(ReportAudit, id=audit_id)
+    fname = audit.file_name
+    _permanently_delete_audit(audit)
+    messages.success(request, f"Permanently deleted audit report for '{fname}'.")
     return redirect('audit_index')
 
 
-@require_POST
 def audit_bulk_delete_view(request):
-    """Deletes multiple selected audits or clears all audits."""
-    action = request.POST.get('action', 'delete_selected')
-    selected_ids = request.POST.getlist('selected_ids')
+    """Deletes multiple selected audits or clears all audits permanently."""
+    action = request.POST.get('action') or request.GET.get('action', 'delete_selected')
+    selected_ids = request.POST.getlist('selected_ids') or request.GET.getlist('selected_ids')
 
     if action == 'clear_all':
         audits = list(ReportAudit.objects.all())
         count = len(audits)
         if count > 0:
             for a in audits:
-                audit_id_str = str(a.id)
-                for sub in ['extracted_photos', 'audit_reports', 'blank_previews']:
-                    d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
-                    if os.path.exists(d_path):
-                        shutil.rmtree(d_path, ignore_errors=True)
-                a.delete()
-            messages.success(request, f"Successfully cleared all {count} audit report(s).")
+                _permanently_delete_audit(a)
+            messages.success(request, f"Permanently cleared all {count} audit report(s) and storage.")
         else:
             messages.info(request, "No audit reports to clear.")
         return redirect('audit_index')
@@ -184,14 +192,9 @@ def audit_bulk_delete_view(request):
     audits = list(ReportAudit.objects.filter(id__in=selected_ids))
     count = len(audits)
     for a in audits:
-        audit_id_str = str(a.id)
-        for sub in ['extracted_photos', 'audit_reports', 'blank_previews']:
-            d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
-            if os.path.exists(d_path):
-                shutil.rmtree(d_path, ignore_errors=True)
-        a.delete()
+        _permanently_delete_audit(a)
 
-    messages.success(request, f"Successfully deleted {count} selected audit report(s).")
+    messages.success(request, f"Permanently deleted {count} selected audit report(s).")
     return redirect('audit_index')
 
 
