@@ -94,6 +94,21 @@ class ReportAudit(models.Model):
         return False
 
     @property
+    def basement_rec_discrepancy(self):
+        """Returns True if declared basement rec rooms differs from photo evidence."""
+        if self.basement_rr is not None:
+            count = 0
+            for slot in self.photo_slots.all():
+                if slot.has_image:
+                    raw_l = (slot.raw_label or '').lower()
+                    norm_l = (slot.normalized_label or '').lower()
+                    if any(w in raw_l or w in norm_l for w in ['basement', 'bsmt', 'cellar', 'lower level', 'below grade', 'rec room', 'recreation room']):
+                        if any(w in raw_l for w in ['rec', 'recreation', 'living', 'family', 'den', 'playroom']) or norm_l == 'living room':
+                            count += 1
+            return count != self.basement_rr
+        return False
+
+    @property
     def basement_bedroom_discrepancy(self):
         """Returns True if declared basement bedrooms differs from photo evidence."""
         if self.basement_br is not None:
@@ -121,6 +136,24 @@ class ReportAudit(models.Model):
                         if any(b in raw_l for b in ['bath', 'bathroom', 'bth', 'lavatory', 'powder']) or norm_l == 'bathroom':
                             count += 1
             return int(count) < int(self.basement_ba)
+        return False
+
+    @property
+    def basement_other_discrepancy(self):
+        """Returns True if declared basement other rooms differs from photo evidence."""
+        if self.basement_other is not None:
+            count = 0
+            for slot in self.photo_slots.all():
+                if slot.has_image:
+                    raw_l = (slot.raw_label or '').lower()
+                    norm_l = (slot.normalized_label or '').lower()
+                    if any(w in raw_l or w in norm_l for w in ['basement', 'bsmt', 'cellar', 'lower level', 'below grade']):
+                        is_br = any(b in raw_l for b in ['bedroom', 'bed', 'bdrm', 'br']) or norm_l == 'bedroom'
+                        is_ba = any(b in raw_l for b in ['bath', 'bathroom', 'bth', 'lavatory', 'powder']) or norm_l == 'bathroom'
+                        is_rec = any(w in raw_l for w in ['rec', 'recreation', 'living', 'family', 'den', 'playroom']) or norm_l == 'living room'
+                        if not is_br and not is_ba and not is_rec:
+                            count += 1
+            return count != self.basement_other
         return False
 
 

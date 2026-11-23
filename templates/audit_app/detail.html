@@ -108,7 +108,7 @@
                 <span class="fw-bold text-dark d-flex align-items-center gap-1">
                     <i class="bi bi-door-closed text-info fs-5"></i> Room & Bed/Bath Audit
                 </span>
-                {% if audit.bedroom_discrepancy or audit.total_rooms_discrepancy or audit.bathroom_discrepancy or audit.basement_bedroom_discrepancy or audit.basement_bathroom_discrepancy %}
+                {% if audit.bedroom_discrepancy or audit.total_rooms_discrepancy or audit.bathroom_discrepancy or audit.basement_bedroom_discrepancy or audit.basement_bathroom_discrepancy or audit.basement_rec_discrepancy or audit.basement_other_discrepancy %}
                     <span class="pill-badge pill-warning"><i class="bi bi-exclamation-circle-fill"></i> Discrepancy</span>
                 {% else %}
                     <span class="pill-badge pill-success"><i class="bi bi-check-circle-fill"></i> Verified</span>
@@ -128,12 +128,20 @@
                     <span class="fw-bold text-dark">{{ audit.total_bathrooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ audit.bathroom_photos_identified }} Photos</span>
                 </div>
                 <div class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="text-muted">Basement Bedrooms vs Photos:</span>
+                    <span class="text-muted">Basement Rec Rooms (rr) vs Photos:</span>
+                    <span class="fw-bold text-dark">{{ audit.basement_rr|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_rec_photos|length }} Photos</span>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Basement Bedrooms (br) vs Photos:</span>
                     <span class="fw-bold text-dark">{{ audit.basement_br|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_bedroom_photos|length }} Photos</span>
                 </div>
-                <div class="d-flex justify-content-between py-1">
-                    <span class="text-muted">Basement Bathrooms vs Photos:</span>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Basement Bathrooms (ba) vs Photos:</span>
                     <span class="fw-bold text-dark">{{ audit.basement_ba|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_bath_photos|length }} Photos</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">Basement Other (o) vs Photos:</span>
+                    <span class="fw-bold text-dark">{{ audit.basement_other|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr; {{ basement_other_photos|length }} Photos</span>
                 </div>
             </div>
         </div>

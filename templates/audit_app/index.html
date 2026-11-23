@@ -293,6 +293,15 @@
                                         <div class="small text-muted mt-1">
                                             <span class="fw-semibold">Baths:</span> {{ a.total_bathrooms|default:"-" }} {% if a.report_type == 'XML' %}XML{% else %}PDF{% endif %} &rarr; {{ a.bathroom_photos_identified }} Photos
                                         </div>
+                                        {% if a.basement_rooms_summary %}
+                                            <div class="small text-muted mt-1" style="font-size: 0.72rem;">
+                                                <span class="fw-semibold">Bsmt:</span> <span class="badge bg-light text-dark border">{{ a.basement_rooms_summary }}</span>
+                                            </div>
+                                        {% elif a.basement_rr is not None %}
+                                            <div class="small text-muted mt-1" style="font-size: 0.72rem;">
+                                                <span class="fw-semibold">Bsmt:</span> <span class="badge bg-light text-dark border">{{ a.basement_rr }}rr {{ a.basement_br }}br {{ a.basement_ba }}ba {{ a.basement_other }}o</span>
+                                            </div>
+                                        {% endif %}
                                     {% else %}
                                         <span class="text-muted small">-</span>
                                     {% endif %}
