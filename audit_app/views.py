@@ -1,4 +1,5 @@
 import os
+import shutil
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.conf import settings
@@ -141,11 +142,56 @@ def audit_detail_view(request, audit_id):
 
 @require_POST
 def audit_delete_view(request, audit_id):
-    """Deletes an audit and redirects to the index view."""
+    """Deletes a single audit and its media artifacts on disk, then redirects to index."""
     audit = get_object_or_404(ReportAudit, id=audit_id)
     fname = audit.file_name
+    audit_id_str = str(audit.id)
+    for sub in ['extracted_photos', 'audit_reports', 'blank_previews']:
+        d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
+        if os.path.exists(d_path):
+            shutil.rmtree(d_path, ignore_errors=True)
     audit.delete()
     messages.info(request, f"Audit report for '{fname}' deleted.")
+    return redirect('audit_index')
+
+
+@require_POST
+def audit_bulk_delete_view(request):
+    """Deletes multiple selected audits or clears all audits."""
+    action = request.POST.get('action', 'delete_selected')
+    selected_ids = request.POST.getlist('selected_ids')
+
+    if action == 'clear_all':
+        audits = list(ReportAudit.objects.all())
+        count = len(audits)
+        if count > 0:
+            for a in audits:
+                audit_id_str = str(a.id)
+                for sub in ['extracted_photos', 'audit_reports', 'blank_previews']:
+                    d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
+                    if os.path.exists(d_path):
+                        shutil.rmtree(d_path, ignore_errors=True)
+                a.delete()
+            messages.success(request, f"Successfully cleared all {count} audit report(s).")
+        else:
+            messages.info(request, "No audit reports to clear.")
+        return redirect('audit_index')
+
+    if not selected_ids:
+        messages.warning(request, "No audit reports were selected for deletion.")
+        return redirect('audit_index')
+
+    audits = list(ReportAudit.objects.filter(id__in=selected_ids))
+    count = len(audits)
+    for a in audits:
+        audit_id_str = str(a.id)
+        for sub in ['extracted_photos', 'audit_reports', 'blank_previews']:
+            d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
+            if os.path.exists(d_path):
+                shutil.rmtree(d_path, ignore_errors=True)
+        a.delete()
+
+    messages.success(request, f"Successfully deleted {count} selected audit report(s).")
     return redirect('audit_index')
 
 

@@ -210,7 +210,18 @@
             </div>
             <span>Audit History & Verification Reports</span>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <!-- Delete Selected Button -->
+            <button type="button" id="deleteSelectedBtn" class="btn btn-sm btn-danger shadow-xs d-none" onclick="submitBulkDelete()" title="Delete all selected reports">
+                <i class="bi bi-trash-fill me-1"></i> Delete Selected (<span id="selectedCountBadge">0</span>)
+            </button>
+            <!-- Clear All Button -->
+            {% if recent_audits %}
+            <button type="button" id="clearAllBtn" class="btn btn-sm btn-outline-danger shadow-xs" onclick="confirmClearAll()" title="Clear all audit records">
+                <i class="bi bi-trash3 me-1"></i> Clear All
+            </button>
+            {% endif %}
+
             <div class="input-group input-group-sm" style="max-width: 250px;">
                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                 <input type="text" class="form-control border-start-0" id="searchAuditsInput" placeholder="Filter reports...">
@@ -220,11 +231,21 @@
     </div>
     <div class="card-body p-0">
         {% if recent_audits %}
+            <!-- Hidden form for bulk delete & clear all -->
+            <form id="bulkDeleteForm" method="post" action="{% url 'audit_bulk_delete' %}" style="display: none;">
+                {% csrf_token %}
+                <input type="hidden" name="action" id="bulkActionInput" value="delete_selected">
+                <div id="bulkSelectedIdsContainer"></div>
+            </form>
+
             <div class="table-responsive">
                 <table class="table-pro" id="auditsTable">
                     <thead>
                         <tr>
-                            <th class="ps-4">Report Document & Property</th>
+                            <th class="ps-3 pe-0 text-center" style="width: 44px;">
+                                <input type="checkbox" class="form-check-input" id="selectAllAudits" title="Select / Deselect All Visible">
+                            </th>
+                            <th class="ps-3">Report Document & Property</th>
                             <th>Status</th>
                             <th>Bed/Bath Reconciliation</th>
                             <th>Photos Scanned</th>
@@ -236,8 +257,11 @@
                     </thead>
                     <tbody>
                         {% for a in recent_audits %}
-                            <tr class="audit-row">
-                                <td class="ps-4">
+                            <tr class="audit-row" id="audit-row-{{ a.id }}">
+                                <td class="ps-3 pe-0 text-center" style="width: 44px;">
+                                    <input type="checkbox" class="form-check-input audit-select-check" value="{{ a.id }}" data-name="{{ a.file_name }}" onchange="updateSelectionState()">
+                                </td>
+                                <td class="ps-3">
                                     <a href="{% url 'audit_detail' a.id %}" class="fw-bold text-decoration-none text-dark d-block">
                                         <i class="bi bi-file-earmark-text text-primary me-1"></i> {{ a.file_name }}
                                     </a>
@@ -411,7 +435,93 @@
                 const text = row.textContent.toLowerCase();
                 row.style.display = text.includes(q) ? '' : 'none';
             });
+            updateSelectionState();
         });
+    }
+
+    // Multiple selection and bulk delete logic
+    function updateSelectionState() {
+        const checkedBoxes = document.querySelectorAll('.audit-select-check:checked');
+        const count = checkedBoxes.length;
+        const deleteBtn = document.getElementById('deleteSelectedBtn');
+        const badge = document.getElementById('selectedCountBadge');
+        const selectAll = document.getElementById('selectAllAudits');
+        const visibleRows = document.querySelectorAll('#auditsTable tbody tr.audit-row:not([style*="display: none"]) .audit-select-check');
+
+        if (badge) badge.textContent = count;
+        if (deleteBtn) {
+            if (count > 0) {
+                deleteBtn.classList.remove('d-none');
+            } else {
+                deleteBtn.classList.add('d-none');
+            }
+        }
+
+        // Highlight selected rows
+        document.querySelectorAll('.audit-select-check').forEach(cb => {
+            const tr = cb.closest('tr');
+            if (cb.checked) {
+                tr.classList.add('table-light');
+            } else {
+                tr.classList.remove('table-light');
+            }
+        });
+
+        // Update select all checkbox indeterminate / checked state
+        if (selectAll && visibleRows.length > 0) {
+            const allChecked = Array.from(visibleRows).every(cb => cb.checked);
+            const someChecked = Array.from(visibleRows).some(cb => cb.checked);
+            selectAll.checked = allChecked;
+            selectAll.indeterminate = someChecked && !allChecked;
+        }
+    }
+
+    const selectAllCheckbox = document.getElementById('selectAllAudits');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            const visibleChecks = document.querySelectorAll('#auditsTable tbody tr.audit-row:not([style*="display: none"]) .audit-select-check');
+            visibleChecks.forEach(cb => {
+                cb.checked = isChecked;
+            });
+            updateSelectionState();
+        });
+    }
+
+    function submitBulkDelete() {
+        const checked = document.querySelectorAll('.audit-select-check:checked');
+        if (checked.length === 0) {
+            alert("Please select at least one audit report to delete.");
+            return;
+        }
+        if (confirm(`Are you sure you want to permanently delete the ${checked.length} selected audit report(s)?`)) {
+            const form = document.getElementById('bulkDeleteForm');
+            const container = document.getElementById('bulkSelectedIdsContainer');
+            container.innerHTML = '';
+            document.getElementById('bulkActionInput').value = 'delete_selected';
+            checked.forEach(cb => {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'selected_ids';
+                hiddenInput.value = cb.value;
+                container.appendChild(hiddenInput);
+            });
+            form.submit();
+        }
+    }
+
+    function confirmClearAll() {
+        const total = {{ recent_audits.count|default:0 }};
+        if (total === 0) {
+            alert("No audit reports to clear.");
+            return;
+        }
+        if (confirm(`⚠️ Warning: Are you sure you want to permanently clear ALL ${total} audit report(s)? This action cannot be undone.`)) {
+            const form = document.getElementById('bulkDeleteForm');
+            document.getElementById('bulkActionInput').value = 'clear_all';
+            document.getElementById('bulkSelectedIdsContainer').innerHTML = '';
+            form.submit();
+        }
     }
 </script>
 {% endblock %}
