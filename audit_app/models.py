@@ -93,6 +93,36 @@ class ReportAudit(models.Model):
             return int(self.bathroom_photos_identified) < int(self.total_bathrooms)
         return False
 
+    @property
+    def basement_bedroom_discrepancy(self):
+        """Returns True if declared basement bedrooms differs from photo evidence."""
+        if self.basement_br is not None:
+            count = 0
+            for slot in self.photo_slots.all():
+                if slot.has_image:
+                    raw_l = (slot.raw_label or '').lower()
+                    norm_l = (slot.normalized_label or '').lower()
+                    if any(w in raw_l or w in norm_l for w in ['basement', 'bsmt', 'cellar', 'lower level', 'below grade']):
+                        if any(b in raw_l for b in ['bedroom', 'bed', 'bdrm', 'br']) or norm_l == 'bedroom':
+                            count += 1
+            return count != self.basement_br
+        return False
+
+    @property
+    def basement_bathroom_discrepancy(self):
+        """Returns True if declared basement bathrooms differs from photo evidence."""
+        if self.basement_ba is not None:
+            count = 0
+            for slot in self.photo_slots.all():
+                if slot.has_image:
+                    raw_l = (slot.raw_label or '').lower()
+                    norm_l = (slot.normalized_label or '').lower()
+                    if any(w in raw_l or w in norm_l for w in ['basement', 'bsmt', 'cellar', 'lower level', 'below grade']):
+                        if any(b in raw_l for b in ['bath', 'bathroom', 'bth', 'lavatory', 'powder']) or norm_l == 'bathroom':
+                            count += 1
+            return int(count) < int(self.basement_ba)
+        return False
+
 
 class AuditPhotoSlot(models.Model):
     STATUS_CHOICES = [

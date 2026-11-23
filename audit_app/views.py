@@ -109,11 +109,11 @@ def audit_detail_view(request, audit_id):
         norm_l = (slot.normalized_label or '').lower()
         if any(w in raw_l or w in norm_l for w in basement_keywords):
             basement_photos.append(slot)
-            if 'bedroom' in raw_l or norm_l == 'bedroom':
+            if any(b in raw_l for b in ['bedroom', 'bed', 'bdrm', 'br']) or norm_l == 'bedroom':
                 basement_bedroom_photos.append(slot)
-            elif 'bath' in raw_l or norm_l == 'bathroom':
+            elif any(b in raw_l for b in ['bath', 'bathroom', 'bth', 'lavatory', 'powder']) or norm_l == 'bathroom':
                 basement_bath_photos.append(slot)
-            elif any(w in raw_l for w in ['rec', 'recreation', 'living', 'family']) or norm_l == 'living room':
+            elif any(w in raw_l for w in ['rec', 'recreation', 'living', 'family', 'den', 'playroom']) or norm_l == 'living room':
                 basement_rec_photos.append(slot)
             else:
                 basement_other_photos.append(slot)
