@@ -30,7 +30,10 @@ media/blank_previews/*
 *.tar.gz
 scratch/
 
-# IDEs
+# IDEs & OS
+desktop.ini
+.DS_Store
+Thumbs.db
 .idea/
 .vscode/
 *.swp
