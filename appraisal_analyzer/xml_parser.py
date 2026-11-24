@@ -64,85 +64,111 @@ class XMLAppraisalParser:
             "pdf_bytes": None,
         }
 
-        # Traverse tags
-        for elem in self.root.iter():
+        def _walk(elem: ET.Element, in_comp: bool = False):
             tag = elem.tag.split("}")[-1]
             attrib = elem.attrib
 
-            # Address & property identification
-            if tag == "PROPERTY":
-                if attrib.get("_StreetAddress"):
-                    data["property_address"] = attrib.get("_StreetAddress")
-                if attrib.get("_City"):
-                    data["city"] = attrib.get("_City")
-                if attrib.get("_State"):
-                    data["state"] = attrib.get("_State")
-                if attrib.get("_PostalCode"):
-                    data["postal_code"] = attrib.get("_PostalCode")
+            # Track whether this subtree belongs to a Comparable Sale (non-Subject)
+            curr_in_comp = in_comp
+            if tag == "COMPARABLE_SALE":
+                seq = (
+                    attrib.get("PropertySequenceIdentifier")
+                    or attrib.get("ComparableSaleSequenceID")
+                    or attrib.get("_SequenceIdentifier")
+                    or ""
+                ).strip()
+                # Sequence "0" (or "Subject") is the Subject column; "1", "2", ... are Comps
+                if seq and seq.lower() not in ("0", "subject"):
+                    curr_in_comp = True
 
-            # Structure information (Rooms, Beds, Baths, GLA)
-            if tag == "STRUCTURE":
-                if attrib.get("TotalRoomCount"):
-                    data["total_rooms"] = safe_int(attrib.get("TotalRoomCount"))
-                if attrib.get("TotalBedroomCount"):
-                    data["total_bedrooms"] = safe_int(attrib.get("TotalBedroomCount"))
-                if attrib.get("TotalBathroomCount"):
-                    data["total_bathrooms"] = safe_float(
-                        attrib.get("TotalBathroomCount")
-                    )
-                if attrib.get("GrossLivingAreaSquareFeetCount"):
-                    data["gross_living_area"] = safe_float(
-                        attrib.get("GrossLivingAreaSquareFeetCount")
-                    )
+            if not curr_in_comp:
+                # Address & property identification (Subject only)
+                if tag == "PROPERTY":
+                    if attrib.get("_StreetAddress") and not data["property_address"]:
+                        data["property_address"] = attrib.get("_StreetAddress")
+                    if attrib.get("_City") and not data["city"]:
+                        data["city"] = attrib.get("_City")
+                    if attrib.get("_State") and not data["state"]:
+                        data["state"] = attrib.get("_State")
+                    if attrib.get("_PostalCode") and not data["postal_code"]:
+                        data["postal_code"] = attrib.get("_PostalCode")
 
-            # Valuation
-            if tag == "VALUATION":
-                if attrib.get("PropertyAppraisedValueAmount"):
-                    data["appraised_value"] = attrib.get("PropertyAppraisedValueAmount")
+                # Structure information (Subject Rooms, Beds, Baths, GLA)
+                if tag == "STRUCTURE":
+                    if attrib.get("TotalRoomCount") and data["total_rooms"] is None:
+                        data["total_rooms"] = safe_int(attrib.get("TotalRoomCount"))
+                    if attrib.get("TotalBedroomCount") and data["total_bedrooms"] is None:
+                        data["total_bedrooms"] = safe_int(attrib.get("TotalBedroomCount"))
+                    if attrib.get("TotalBathroomCount") and data["total_bathrooms"] is None:
+                        data["total_bathrooms"] = safe_float(
+                            attrib.get("TotalBathroomCount")
+                        )
+                    if attrib.get("GrossLivingAreaSquareFeetCount") and data["gross_living_area"] is None:
+                        data["gross_living_area"] = safe_float(
+                            attrib.get("GrossLivingAreaSquareFeetCount")
+                        )
 
-            # Basement below grade rooms from Sales Grid
-            if tag == "COMPARISON_DETAIL":
-                if attrib.get("GSEBelowGradeTotalSquareFeetNumber") is not None and data["basement_total_sqft"] is None:
-                    data["basement_total_sqft"] = safe_int(attrib.get("GSEBelowGradeTotalSquareFeetNumber"))
-                if attrib.get("GSEBelowGradeFinishSquareFeetNumber") is not None and data["basement_finished_sqft"] is None:
-                    data["basement_finished_sqft"] = safe_int(attrib.get("GSEBelowGradeFinishSquareFeetNumber"))
-                if attrib.get("GSEBelowGradeRecreationRoomCount") is not None and data["basement_rr"] is None:
-                    data["basement_rr"] = safe_int(attrib.get("GSEBelowGradeRecreationRoomCount"))
-                    data["basement_br"] = safe_int(attrib.get("GSEBelowGradeBedroomRoomCount"))
-                    data["basement_ba"] = safe_float(attrib.get("GSEBelowGradeBathroomRoomCount"))
-                    data["basement_other"] = safe_int(attrib.get("GSEBelowGradeOtherRoomCount"))
-                    if not data["basement_rooms_summary"]:
-                        data["basement_rooms_summary"] = f"{data['basement_rr']}rr {data['basement_br']}br {data['basement_ba']}ba {data['basement_other']}o"
-            elif tag == "SALE_PRICE_ADJUSTMENT":
-                desc = attrib.get("_Description", "")
-                m = re.search(r"(\d+)rr\s*(\d+)br\s*([\d\.]+)ba\s*(\d+)o", desc, re.I)
-                if m and data["basement_rr"] is None:
-                    data["basement_rr"] = safe_int(m.group(1))
-                    data["basement_br"] = safe_int(m.group(2))
-                    data["basement_ba"] = safe_float(m.group(3))
-                    data["basement_other"] = safe_int(m.group(4))
-                    data["basement_rooms_summary"] = desc.strip()
-                m_sf = re.search(r"(\d+)sf\s*(\d+)sfin", desc, re.I)
-                if m_sf:
-                    if data["basement_total_sqft"] is None:
-                        data["basement_total_sqft"] = safe_int(m_sf.group(1))
-                    if data["basement_finished_sqft"] is None:
-                        data["basement_finished_sqft"] = safe_int(m_sf.group(2))
-            elif tag == "BASEMENT":
-                if attrib.get("SquareFeetCount") and data["basement_total_sqft"] is None:
-                    data["basement_total_sqft"] = safe_int(attrib.get("SquareFeetCount"))
+                # Valuation (Subject only)
+                if tag == "VALUATION":
+                    if attrib.get("PropertyAppraisedValueAmount") and not data["appraised_value"]:
+                        data["appraised_value"] = attrib.get("PropertyAppraisedValueAmount")
 
-            # Embedded PDF
-            if tag == "DOCUMENT" and elem.text:
-                raw_b64 = elem.text.strip()
-                if len(raw_b64) > 1000:
-                    try:
-                        decoded = base64.b64decode(raw_b64)
-                        if decoded.startswith(b"%PDF"):
-                            data["has_embedded_pdf"] = True
-                            data["pdf_bytes"] = decoded
-                    except Exception:
-                        pass
+                # Basement below grade rooms from Subject column of Sales Grid
+                if tag == "COMPARISON_DETAIL":
+                    if attrib.get("GSEBelowGradeTotalSquareFeetNumber") is not None and data["basement_total_sqft"] is None:
+                        data["basement_total_sqft"] = safe_int(attrib.get("GSEBelowGradeTotalSquareFeetNumber"))
+                    if attrib.get("GSEBelowGradeFinishSquareFeetNumber") is not None and data["basement_finished_sqft"] is None:
+                        data["basement_finished_sqft"] = safe_int(attrib.get("GSEBelowGradeFinishSquareFeetNumber"))
+                    if attrib.get("GSEBelowGradeRecreationRoomCount") is not None and data["basement_rr"] is None:
+                        data["basement_rr"] = safe_int(attrib.get("GSEBelowGradeRecreationRoomCount"))
+                        data["basement_br"] = safe_int(attrib.get("GSEBelowGradeBedroomRoomCount"))
+                        data["basement_ba"] = safe_float(attrib.get("GSEBelowGradeBathroomRoomCount"))
+                        data["basement_other"] = safe_int(attrib.get("GSEBelowGradeOtherRoomCount"))
+                        if not data["basement_rooms_summary"]:
+                            data["basement_rooms_summary"] = f"{data['basement_rr']}rr {data['basement_br']}br {data['basement_ba']}ba {data['basement_other']}o"
+                elif tag == "SALE_PRICE_ADJUSTMENT":
+                    adj_type = (attrib.get("_Type") or "").lower()
+                    desc = attrib.get("_Description", "")
+                    is_basement_adj = (not adj_type) or ("basement" in adj_type) or ("belowgrade" in adj_type)
+                    if is_basement_adj:
+                        m = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", desc, re.I)
+                        if m and data["basement_rr"] is None:
+                            data["basement_rr"] = safe_int(m.group(1))
+                            data["basement_br"] = safe_int(m.group(2))
+                            data["basement_ba"] = safe_float(m.group(3))
+                            data["basement_other"] = safe_int(m.group(4))
+                            data["basement_rooms_summary"] = desc.strip()
+                        m_sf = re.search(r"(\d+)\s*sf\s*(\d+)\s*s?f?(?:in|wo|wu)?", desc, re.I)
+                        if m_sf:
+                            if data["basement_total_sqft"] is None:
+                                data["basement_total_sqft"] = safe_int(m_sf.group(1))
+                            if data["basement_finished_sqft"] is None:
+                                data["basement_finished_sqft"] = safe_int(m_sf.group(2))
+                        elif re.search(r"\b0\s*sf\b", desc, re.I) and data["basement_total_sqft"] is None:
+                            data["basement_total_sqft"] = 0
+                            data["basement_finished_sqft"] = 0
+                            if not data["basement_rooms_summary"]:
+                                data["basement_rooms_summary"] = desc.strip() or "0sf"
+                elif tag == "BASEMENT":
+                    if attrib.get("SquareFeetCount") and data["basement_total_sqft"] is None:
+                        data["basement_total_sqft"] = safe_int(attrib.get("SquareFeetCount"))
+
+                # Embedded PDF
+                if tag == "DOCUMENT" and elem.text:
+                    raw_b64 = elem.text.strip()
+                    if len(raw_b64) > 1000:
+                        try:
+                            decoded = base64.b64decode(raw_b64)
+                            if decoded.startswith(b"%PDF"):
+                                data["has_embedded_pdf"] = True
+                                data["pdf_bytes"] = decoded
+                        except Exception:
+                            pass
+
+            for child in elem:
+                _walk(child, curr_in_comp)
+
+        _walk(self.root, in_comp=False)
 
         return data
 

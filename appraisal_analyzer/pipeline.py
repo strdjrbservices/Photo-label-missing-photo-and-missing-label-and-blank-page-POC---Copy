@@ -117,48 +117,123 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
 
             # 3. Sales Comparison Subject Column Extraction for Basement & Room Counts
             if "sales comparison approach" in text.lower() or "value adjustments" in text.lower():
-                # Scope basement row precisely to the Basement row label on the left (x < 85)
-                b_labels = [w for w in words if w[4].lower().startswith("basement") and w[0] < 85]
-                if not b_labels:
-                    b_labels = [w for w in words if "basement" in w[4].lower() and w[0] < 85]
-                if b_labels:
-                    by = b_labels[0][1]
-                    # Subject column words on this specific row
-                    row_words = [w for w in words if 88 <= w[0] <= 190 and -5 <= (w[1] - by) <= 25]
-                    row_words.sort(key=lambda w: (w[1], w[0]))
-                    row_txt = " ".join(w[4] for w in row_words)
+                # Dynamically determine Subject column X boundaries from the SUBJECT & COMPARABLE headers
+                subj_headers = [w for w in words if w[4].strip().upper() == "SUBJECT" and 75 <= w[0] <= 240]
+                subj_header_y = 0.0
+                subj_x_min = 95.0
+                comp1_x_min = 185.0
 
-                    # Below Grade UAD counts (rr, br, ba, o)
-                    m_uad = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", row_txt, re.I)
-                    if m_uad and metrics["basement_rr"] is None:
-                        metrics["basement_rr"] = int(m_uad.group(1))
-                        metrics["basement_br"] = int(m_uad.group(2))
+                for sh in subj_headers:
+                    sy = sh[1]
+                    comp_on_row = [
+                        w for w in words
+                        if abs(w[1] - sy) <= 12
+                        and w[0] > sh[2]
+                        and w[4].strip().upper().startswith(("COMPARABLE", "COMP", "SALE"))
+                    ]
+                    if comp_on_row:
+                        comp_on_row.sort(key=lambda w: w[0])
+                        subj_header_y = sy
+
+                        # First try exact vertical table dividers from PDF vector drawings
+                        v_lines = []
                         try:
-                            metrics["basement_ba"] = float(m_uad.group(3))
-                        except ValueError:
-                            metrics["basement_ba"] = 0.0
-                        metrics["basement_other"] = int(m_uad.group(4))
-                        metrics["basement_rooms_summary"] = f"{m_uad.group(1)}rr {m_uad.group(2)}br {m_uad.group(3)}ba {m_uad.group(4)}o"
+                            for d in page.get_drawings():
+                                r = d.get("rect")
+                                if r and r.width <= 3.5 and r.height >= 120:
+                                    # Must overlap the grid below the header
+                                    if r.y1 > sy + 50 and r.y0 < sy + 350:
+                                        v_lines.append((r.x0 + r.x1) / 2.0)
+                                for item in d.get("items", []):
+                                    if item[0] == "l":
+                                        p1, p2 = item[1], item[2]
+                                        if abs(p1.x - p2.x) <= 2.5 and abs(p2.y - p1.y) >= 120:
+                                            ymin, ymax = min(p1.y, p2.y), max(p1.y, p2.y)
+                                            if ymax > sy + 50 and ymin < sy + 350:
+                                                v_lines.append((p1.x + p2.x) / 2.0)
+                        except Exception:
+                            pass
 
-                    # Check for 0sf or 0 sf (no basement or 0 finished)
-                    if re.search(r"\b0\s*sf\b", row_txt, re.I) and metrics["basement_total_sqft"] is None:
-                        metrics["basement_total_sqft"] = 0
-                        metrics["basement_finished_sqft"] = 0
-                        if not metrics["basement_rooms_summary"]:
-                            metrics["basement_rooms_summary"] = "0sf (None)"
-                    else:
-                        m_sf = re.search(r"(\d+)\s*sf\s*(\d+)\s*s?f?(?:in|wo|wu)?", row_txt, re.I)
-                        if m_sf and metrics["basement_total_sqft"] is None:
-                            metrics["basement_total_sqft"] = int(m_sf.group(1))
-                            metrics["basement_finished_sqft"] = int(m_sf.group(2))
-                        elif metrics["basement_total_sqft"] is None:
-                            m_sf1 = re.search(r"(\d+)\s*sf", row_txt, re.I)
-                            if m_sf1:
-                                metrics["basement_total_sqft"] = int(m_sf1.group(1))
+                        left_dividers = [x for x in v_lines if 60.0 <= x <= sh[0] + 4.0]
+                        right_dividers = [x for x in v_lines if sh[2] - 4.0 <= x <= comp_on_row[0][0] + 15.0]
 
-                # Subject column fallback room counts from subject column if not found earlier
-                subj_words = [w for w in words if 90 <= w[0] <= 188]
-                subj_text = " ".join(w[4] for w in sorted(subj_words, key=lambda w: (w[1], w[0])))
+                        if right_dividers:
+                            comp1_x_min = min(right_dividers) - 1.0
+                        else:
+                            # Fallback using DESCRIPTION subheader or midpoint before Comp 1
+                            desc_words = sorted(
+                                [w for w in words if w[4].strip().upper() == "DESCRIPTION" and sy < w[1] < sy + 200 and w[0] > sh[0] - 30],
+                                key=lambda w: w[0],
+                            )
+                            if len(desc_words) >= 2:
+                                comp1_x_min = min(desc_words[1][0] - 8.0, comp_on_row[0][0] - 12.0)
+                            else:
+                                comp1_x_min = max(sh[2] + 5.0, comp_on_row[0][0] - 18.0)
+
+                        if left_dividers:
+                            subj_x_min = max(left_dividers) + 1.0
+                        else:
+                            feat_on_row = [w for w in words if abs(w[1] - sy) <= 12 and w[2] < sh[0]]
+                            if feat_on_row:
+                                feat_on_row.sort(key=lambda w: w[2])
+                                subj_x_min = max(75.0, feat_on_row[-1][2] + 4.0)
+                            else:
+                                subj_x_min = max(85.0, sh[0] - 35.0)
+                        break
+
+                # Only extract from grid if SUBJECT + COMPARABLE column headers were located
+                if subj_header_y > 0:
+                    # Scope basement rows strictly below the header row and left of Subject column
+                    b_labels = [
+                        w for w in words
+                        if w[4].lower().startswith("basement")
+                        and w[0] < subj_x_min
+                        and w[1] > subj_header_y
+                    ]
+                    for b_lbl in b_labels:
+                        by = b_lbl[1]
+                        # Strictly capture ONLY Subject column words on this specific row [subj_x_min, comp1_x_min)
+                        row_words = [
+                            w for w in words
+                            if subj_x_min <= w[0] < comp1_x_min
+                            and -5 <= (w[1] - by) <= 22
+                        ]
+                        row_words.sort(key=lambda w: (w[1], w[0]))
+                        row_txt = " ".join(w[4] for w in row_words)
+
+                        # Below Grade UAD counts (rr, br, ba, o)
+                        m_uad = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", row_txt, re.I)
+                        if m_uad and metrics["basement_rr"] is None:
+                            metrics["basement_rr"] = int(m_uad.group(1))
+                            metrics["basement_br"] = int(m_uad.group(2))
+                            try:
+                                metrics["basement_ba"] = float(m_uad.group(3))
+                            except ValueError:
+                                metrics["basement_ba"] = 0.0
+                            metrics["basement_other"] = int(m_uad.group(4))
+                            metrics["basement_rooms_summary"] = f"{m_uad.group(1)}rr {m_uad.group(2)}br {m_uad.group(3)}ba {m_uad.group(4)}o"
+
+                        # Check for 0sf or 0 sf (no basement or 0 finished)
+                        if re.search(r"\b0\s*sf\b", row_txt, re.I) and metrics["basement_total_sqft"] is None:
+                            metrics["basement_total_sqft"] = 0
+                            metrics["basement_finished_sqft"] = 0
+                            if not metrics["basement_rooms_summary"]:
+                                metrics["basement_rooms_summary"] = "0sf (None)"
+                        else:
+                            m_sf = re.search(r"(\d+)\s*sf\s*(\d+)\s*s?f?(?:in|wo|wu)?", row_txt, re.I)
+                            if m_sf and metrics["basement_total_sqft"] is None:
+                                metrics["basement_total_sqft"] = int(m_sf.group(1))
+                                metrics["basement_finished_sqft"] = int(m_sf.group(2))
+                            elif metrics["basement_total_sqft"] is None:
+                                m_sf1 = re.search(r"(\d+)\s*sf", row_txt, re.I)
+                                if m_sf1:
+                                    metrics["basement_total_sqft"] = int(m_sf1.group(1))
+
+                    # Subject column fallback room counts strictly inside Subject column [subj_x_min, comp1_x_min)
+                    subj_words = [w for w in words if subj_x_min <= w[0] < comp1_x_min and w[1] > subj_header_y]
+                    subj_text = " ".join(w[4] for w in sorted(subj_words, key=lambda w: (w[1], w[0])))
+                else:
+                    subj_text = ""
                 if metrics["total_rooms"] is None or metrics["bedrooms"] is None or metrics["gross_living_area"] is None:
                     m_rc = re.search(r"Total\s+Bdrms\.?\s+Baths\s+(\d+)\s+(\d+)\s+([\d\.]+)", subj_text, re.I)
                     if m_rc:
