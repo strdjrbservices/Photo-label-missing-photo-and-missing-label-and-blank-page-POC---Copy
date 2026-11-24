@@ -186,16 +186,20 @@ def _permanently_delete_audit(audit):
         d_path = os.path.join(settings.MEDIA_ROOT, sub, audit_id_str)
         if os.path.exists(d_path):
             shutil.rmtree(d_path, ignore_errors=True)
-    try:
-        if audit.report_file:
-            audit.report_file.delete(save=False)
-    except Exception:
-        pass
-    try:
-        if audit.excel_report:
-            audit.excel_report.delete(save=False)
-    except Exception:
-        pass
+    for field_name in ['original_file', 'excel_report', 'json_report']:
+        try:
+            f = getattr(audit, field_name, None)
+            if f:
+                f.delete(save=False)
+        except Exception:
+            pass
+    if audit.extracted_pdf_path:
+        pdf_path = os.path.join(settings.MEDIA_ROOT, 'uploads', os.path.basename(audit.extracted_pdf_path))
+        if os.path.exists(pdf_path):
+            try:
+                os.remove(pdf_path)
+            except Exception:
+                pass
     audit.delete()
 
 
