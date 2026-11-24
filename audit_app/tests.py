@@ -19,6 +19,9 @@ class GroupPhotoFilteringTests(TestCase):
             (15, "Photo 1", "Unit #1 Kitchen", "Kitchen"),
             (15, "Photo 2", "Unit #1 Full bathroom", "Bathroom"),
             (15, "Photo 3", "Unit #1 Living room", "Living Room"),
+            (16, "Photo 1", "Solarium", "Solarium"),
+            (16, "Photo 2", "Mudroom", "Mudroom"),
+            (16, "Photo 3", "Mud Room", "Mudroom"),
             (17, "Photo 2", "UNIT #1 BEDROOM", "Bedroom"),
             (22, "Photo 1", "BASEMENT KITCHEN", "Kitchen"),
             (22, "Photo 2", "BASEMENT REC ROOM", "Basement"),
@@ -46,7 +49,12 @@ class GroupPhotoFilteringTests(TestCase):
         self.assertIn("STREET SCENE", labels)
         self.assertIn("Unit #1 Kitchen", labels)
         self.assertIn("Unit #1 Living room", labels)
+        self.assertIn("Solarium", labels)
+        self.assertIn("Mudroom", labels)
+        self.assertIn("Mud Room", labels)
         self.assertIn("BASEMENT KITCHEN", labels)
+        # Solarium & Mudroom/Mud Room count toward room_photos_identified (3 kitchens/living + 3 solarium/mudroom + 1 bedroom = 7)
+        self.assertEqual(self.audit.room_photos_identified, 7)
         # Excluded groups
         self.assertNotIn("UNIT #1 BEDROOM", labels)
         self.assertNotIn("Unit #1 Full bathroom", labels)

@@ -112,6 +112,9 @@ class PhotoVerifier:
             "detector": "Smoke / CO Detector",
             "solar": "Solar Panels",
             "family room": "Family Room",
+            "solarium": "Solarium",
+            "mudroom": "Mudroom",
+            "mud room": "Mudroom",
             "utility": "Utility / Laundry",
             "laundry": "Utility / Laundry",
             "basement": "Basement",
@@ -685,7 +688,7 @@ class PhotoVerifier:
                             total_room_photos += 1
                         elif "bathroom" in cat_lower or "bath" in cat_lower:
                             bathroom_photos += 1
-                        elif any(r in cat_lower for r in ["kitchen", "living", "dining", "family", "den", "office", "sunroom"]):
+                        elif any(r in cat_lower for r in ["kitchen", "living", "dining", "family", "den", "office", "sunroom", "solarium", "mudroom", "mud room"]):
                             total_room_photos += 1
         finally:
             doc.close()

@@ -146,6 +146,7 @@ def audit_detail_view(request, audit_id):
         
         is_room_keyword = any(k in raw_l or k in norm_l for k in [
             'kitchen', 'living', 'dining', 'family', 'den', 'office', 'sunroom',
+            'solarium', 'mudroom', 'mud room',
             'foyer', 'hall', 'room', 'area', 'nook', 'great room', 'library', 'bonus', 'loft'
         ])
         is_subject_exterior = (
@@ -153,7 +154,7 @@ def audit_detail_view(request, audit_id):
             or any(k in raw_l for k in ['front view', 'rear view', 'street scene', 'subject front', 'subject rear', 'subject street'])
         ) and not any(c in raw_l or c in norm_l for c in ['comparable', 'comp ', 'rental'])
         
-        if not excluded_from_total_rooms and (is_room_keyword or is_subject_exterior or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office']):
+        if not excluded_from_total_rooms and (is_room_keyword or is_subject_exterior or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office', 'solarium', 'mudroom']):
             total_room_photos.append(slot)
             groups.append('total_rooms')
             

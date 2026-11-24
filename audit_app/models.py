@@ -63,12 +63,12 @@ class ReportAudit(models.Model):
 
     @property
     def room_photos_identified(self):
-        """Count of photos labeled as major living rooms (bedrooms, kitchen, living, dining, family/den)."""
+        """Count of photos labeled as major living rooms (bedrooms, kitchen, living, dining, family/den, solarium, mudroom)."""
         count = 0
         for slot in self.photo_slots.all():
             if slot.has_image:
-                lbl = (slot.normalized_label or slot.raw_label or '').lower()
-                if any(k in lbl for k in ['bedroom', 'bed', 'kitchen', 'living', 'dining', 'family', 'den', 'office', 'sunroom']):
+                lbl = f"{slot.normalized_label or ''} {slot.raw_label or ''}".lower()
+                if any(k in lbl for k in ['bedroom', 'bed', 'kitchen', 'living', 'dining', 'family', 'den', 'office', 'sunroom', 'solarium', 'mudroom', 'mud room']):
                     count += 1
         return count
 
