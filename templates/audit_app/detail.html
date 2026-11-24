@@ -203,12 +203,20 @@
                         </span>
                     </div>
                 </div>
-                <div class="d-flex justify-content-between align-items-center py-1 audit-card-row" onclick="showGroupPhotos('basement_other', 'Basement Other (o)')" title="Click to view basement other room photos">
+                <div class="d-flex justify-content-between align-items-center py-1 border-bottom audit-card-row" onclick="showGroupPhotos('basement_other', 'Basement Other (o)')" title="Click to view basement other room photos">
                     <span class="text-muted"><i class="bi bi-grid text-secondary me-1"></i>Basement Other (o) vs Photos:</span>
                     <div>
                         <span class="fw-bold text-dark me-1">{{ audit.basement_other|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
                             <i class="bi bi-images me-1"></i>{{ basement_other_photos|length }} Photos
+                        </span>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-1 audit-card-row" onclick="showGroupPhotos('garage', 'Garage')" title="Click to view all garage photos">
+                    <span class="text-muted"><i class="bi bi-car-front text-secondary me-1"></i>Garage Photos:</span>
+                    <div>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge">
+                            <i class="bi bi-images me-1"></i>{{ garage_photos|length }} Photos
                         </span>
                     </div>
                 </div>
@@ -605,6 +613,9 @@
                         </button>
                         <button type="button" class="btn btn-xs btn-outline-secondary group-pill" id="pill-basement_other" onclick="filterGalleryToGroup('basement_other', 'Basement Other (o)')">
                             Bsmt Other ({{ basement_other_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary group-pill" id="pill-garage" onclick="filterGalleryToGroup('garage', 'Garage')">
+                            Garage ({{ garage_photos|length }})
                         </button>
                     </div>
                 </div>

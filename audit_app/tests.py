@@ -23,6 +23,8 @@ class GroupPhotoFilteringTests(TestCase):
             (16, "Photo 2", "Mudroom", "Mudroom"),
             (16, "Photo 3", "Mud Room", "Mudroom"),
             (17, "Photo 2", "UNIT #1 BEDROOM", "Bedroom"),
+            (18, "Photo 1", "THREE CAR GARAGE", "Garage"),
+            (18, "Photo 2", "Garage Interior", "Garage"),
             (22, "Photo 1", "BASEMENT KITCHEN", "Kitchen"),
             (22, "Photo 2", "BASEMENT REC ROOM", "Basement"),
             (22, "Photo 3", "BASEMENT FULL BATHROOM", "Bathroom"),
@@ -61,3 +63,8 @@ class GroupPhotoFilteringTests(TestCase):
         self.assertNotIn("BASEMENT REC ROOM", labels)
         self.assertNotIn("BASEMENT FULL BATHROOM", labels)
         self.assertNotIn("COMPARABLE SALE #1", labels)
+        # Garage photos group & audit card link
+        garage_photos = resp.context["garage_photos"]
+        self.assertEqual([s.raw_label for s in garage_photos], ["THREE CAR GARAGE", "Garage Interior"])
+        self.assertContains(resp, "Garage Photos:")
+        self.assertContains(resp, "showGroupPhotos('garage', 'Garage')")
