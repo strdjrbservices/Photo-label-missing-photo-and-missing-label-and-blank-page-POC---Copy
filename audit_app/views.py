@@ -141,14 +141,19 @@ def audit_detail_view(request, audit_id):
             groups.append('bathrooms')
             
         # Total rooms check: "in total rroms show all photos except br, ba, basement rr, br and bth"
+        # Plus subject front, rear, and street photos
         excluded_from_total_rooms = is_bed or is_bath or (is_bsmt and is_rec) or (is_bsmt and is_bed) or (is_bsmt and is_bath)
         
         is_room_keyword = any(k in raw_l or k in norm_l for k in [
             'kitchen', 'living', 'dining', 'family', 'den', 'office', 'sunroom',
             'foyer', 'hall', 'room', 'area', 'nook', 'great room', 'library', 'bonus', 'loft'
         ])
+        is_subject_exterior = (
+            norm_l in ['exterior front', 'exterior rear', 'street view']
+            or any(k in raw_l for k in ['front view', 'rear view', 'street scene', 'subject front', 'subject rear', 'subject street'])
+        ) and not any(c in raw_l or c in norm_l for c in ['comparable', 'comp ', 'rental'])
         
-        if not excluded_from_total_rooms and (is_room_keyword or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office']):
+        if not excluded_from_total_rooms and (is_room_keyword or is_subject_exterior or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office']):
             total_room_photos.append(slot)
             groups.append('total_rooms')
             
