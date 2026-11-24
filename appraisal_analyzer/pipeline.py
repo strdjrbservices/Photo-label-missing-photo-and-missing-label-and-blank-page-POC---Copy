@@ -192,14 +192,9 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                     ]
                     for b_lbl in b_labels:
                         by = b_lbl[1]
-                        # Strictly capture ONLY Subject column words on this specific row [subj_x_min, comp1_x_min)
-                        row_words = [
-                            w for w in words
-                            if subj_x_min <= w[0] < comp1_x_min
-                            and -5 <= (w[1] - by) <= 22
-                        ]
-                        row_words.sort(key=lambda w: (w[1], w[0]))
-                        row_txt = " ".join(w[4] for w in row_words)
+                        # Strictly clip ONLY Subject column region on this row [subj_x_min, comp1_x_min)
+                        row_clip = pymupdf.Rect(subj_x_min, by - 5.0, comp1_x_min, by + 22.0)
+                        row_txt = " ".join(page.get_text("text", clip=row_clip).split())
 
                         # Below Grade UAD counts (rr, br, ba, o)
                         m_uad = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", row_txt, re.I)
@@ -214,7 +209,7 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                             metrics["basement_rooms_summary"] = f"{m_uad.group(1)}rr {m_uad.group(2)}br {m_uad.group(3)}ba {m_uad.group(4)}o"
 
                         # Check for 0sf or 0 sf (no basement or 0 finished)
-                        if re.search(r"\b0\s*sf\b", row_txt, re.I) and metrics["basement_total_sqft"] is None:
+                        if re.search(r"(?<!\d)0\s*sf\b", row_txt, re.I) and metrics["basement_total_sqft"] is None:
                             metrics["basement_total_sqft"] = 0
                             metrics["basement_finished_sqft"] = 0
                             if not metrics["basement_rooms_summary"]:
@@ -229,9 +224,9 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                                 if m_sf1:
                                     metrics["basement_total_sqft"] = int(m_sf1.group(1))
 
-                    # Subject column fallback room counts strictly inside Subject column [subj_x_min, comp1_x_min)
-                    subj_words = [w for w in words if subj_x_min <= w[0] < comp1_x_min and w[1] > subj_header_y]
-                    subj_text = " ".join(w[4] for w in sorted(subj_words, key=lambda w: (w[1], w[0])))
+                    # Subject column fallback room counts strictly clipped to Subject column [subj_x_min, comp1_x_min)
+                    subj_clip = pymupdf.Rect(subj_x_min, subj_header_y, comp1_x_min, page.rect.height)
+                    subj_text = " ".join(page.get_text("text", clip=subj_clip).split())
                 else:
                     subj_text = ""
                 if metrics["total_rooms"] is None or metrics["bedrooms"] is None or metrics["gross_living_area"] is None:
