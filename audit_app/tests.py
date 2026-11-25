@@ -59,7 +59,7 @@ class GroupPhotoFilteringTests(TestCase):
         subj_ext_labels = [s.raw_label for s in resp.context["subject_exterior_photos"]]
         self.assertEqual(subj_ext_labels, ["FRONT VIEW OF", "REAR VIEW OF", "STREET SCENE"])
         self.assertContains(resp, "Subject Front / Rear / Street:")
-        self.assertContains(resp, "showGroupPhotos('subject_exterior', 'Subject Front, Rear &amp; Street')")
+        self.assertContains(resp, "showGroupPhotos('subject_exterior', 'Subject Front, Rear & Street')")
         self.assertIn("Unit #1 Kitchen", labels)
         self.assertIn("Unit #1 Living room", labels)
         self.assertIn("Solarium", labels)
