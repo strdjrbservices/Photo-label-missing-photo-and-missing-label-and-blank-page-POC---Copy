@@ -98,6 +98,21 @@ class XMLAppraisalParser:
                     curr_in_comp = True
 
             if not curr_in_comp:
+                # Subject column directly on COMPARABLE_SALE seq="0" or ROOM_ADJUSTMENT
+                if tag in ("COMPARABLE_SALE", "ROOM_ADJUSTMENT"):
+                    if attrib.get("TotalRoomCount") is not None and data["sections"]["sales_grid"]["rooms"] is None:
+                        data["sections"]["sales_grid"]["rooms"] = safe_int(attrib.get("TotalRoomCount"))
+                    if attrib.get("TotalBedroomCount") is not None and data["sections"]["sales_grid"]["bedrooms"] is None:
+                        data["sections"]["sales_grid"]["bedrooms"] = safe_int(attrib.get("TotalBedroomCount"))
+                    if attrib.get("TotalBathroomCount") is not None and data["sections"]["sales_grid"]["bathrooms"] is None:
+                        data["sections"]["sales_grid"]["bathrooms"] = safe_float(attrib.get("TotalBathroomCount"))
+                    sg_gla = (
+                        attrib.get("GrossLivingAreaSquareFeetCount")
+                        or attrib.get("GrossBuildingAreaSquareFeetCount")
+                    )
+                    if sg_gla is not None and data["sections"]["sales_grid"]["gla"] is None:
+                        data["sections"]["sales_grid"]["gla"] = safe_float(sg_gla)
+
                 # Address & property identification (Subject only)
                 if tag == "PROPERTY":
                     if attrib.get("_StreetAddress") and not data["property_address"]:
@@ -136,12 +151,15 @@ class XMLAppraisalParser:
 
                 # Basement below grade & Sales Grid values from Subject column
                 if tag == "COMPARISON_DETAIL":
-                    if attrib.get("GSEAboveGradeTotalRoomCount") is not None and data["sections"]["sales_grid"]["rooms"] is None:
-                        data["sections"]["sales_grid"]["rooms"] = safe_int(attrib.get("GSEAboveGradeTotalRoomCount"))
-                    if attrib.get("GSEAboveGradeBedroomCount") is not None and data["sections"]["sales_grid"]["bedrooms"] is None:
-                        data["sections"]["sales_grid"]["bedrooms"] = safe_int(attrib.get("GSEAboveGradeBedroomCount"))
-                    if attrib.get("GSEAboveGradeBathroomCount") is not None and data["sections"]["sales_grid"]["bathrooms"] is None:
-                        data["sections"]["sales_grid"]["bathrooms"] = safe_float(attrib.get("GSEAboveGradeBathroomCount"))
+                    r_cnt = attrib.get("GSEAboveGradeTotalRoomCount") or attrib.get("TotalRoomCount")
+                    b_cnt = attrib.get("GSEAboveGradeBedroomCount") or attrib.get("TotalBedroomCount")
+                    ba_cnt = attrib.get("GSEAboveGradeBathroomCount") or attrib.get("TotalBathroomCount")
+                    if r_cnt is not None and data["sections"]["sales_grid"]["rooms"] is None:
+                        data["sections"]["sales_grid"]["rooms"] = safe_int(r_cnt)
+                    if b_cnt is not None and data["sections"]["sales_grid"]["bedrooms"] is None:
+                        data["sections"]["sales_grid"]["bedrooms"] = safe_int(b_cnt)
+                    if ba_cnt is not None and data["sections"]["sales_grid"]["bathrooms"] is None:
+                        data["sections"]["sales_grid"]["bathrooms"] = safe_float(ba_cnt)
                     grid_gla_attr = (
                         attrib.get("GSEGrossLivingAreaSquareFeetNumber")
                         or attrib.get("GSEGrossBuildingAreaSquareFeetNumber")

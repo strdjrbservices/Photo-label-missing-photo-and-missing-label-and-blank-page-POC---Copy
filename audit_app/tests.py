@@ -293,3 +293,71 @@ class MultiSourceReconciliationAccuracyTests(TestCase):
         self.assertEqual(rec["basement"]["photo_other"], 3)
         self.assertEqual(rec["basement"]["status"], "Photo Variance")
         self.assertNotContains(resp, "Visual Only\n")
+
+    def test_xml_and_pdf_capture_above_grade_grid_and_sketch_summary(self):
+        xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<VALUATION_RESPONSE MISMOVersionID="2.6">
+  <PROPERTY _StreetAddress="19324 Appoline St" />
+  <STRUCTURE TotalRoomCount="7" TotalBedroomCount="3" TotalBathroomCount="1.1" GrossLivingAreaSquareFeetCount="1650" />
+  <VALUATION_METHODS>
+    <SALES_COMPARISON>
+      <COMPARABLE_SALE PropertySequenceIdentifier="0" TotalRoomCount="7" TotalBedroomCount="3" TotalBathroomCount="1.1" GrossLivingAreaSquareFeetCount="1650" />
+      <COMPARABLE_SALE PropertySequenceIdentifier="1" TotalRoomCount="6" TotalBedroomCount="3" TotalBathroomCount="1.0" GrossLivingAreaSquareFeetCount="1420" />
+    </SALES_COMPARISON>
+  </VALUATION_METHODS>
+</VALUATION_RESPONSE>"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False, encoding="utf-8") as tmp_xml:
+            tmp_xml.write(xml_content)
+            xml_path = tmp_xml.name
+
+        doc = pymupdf.open()
+        sk = doc.new_page(width=612, height=792)
+        sk.insert_text((40, 45), "Building Sketch", fontsize=11)
+        sk.insert_text((80, 140), "Bedroom 1", fontsize=8)
+        sk.insert_text((200, 140), "Living Room", fontsize=8)
+        sk.insert_text((80, 180), "Kitchen", fontsize=8)
+        sk.insert_text((200, 180), "Half Bath", fontsize=8)
+        sk.insert_text((40, 420), "AREA CALCULATIONS SUMMARY", fontsize=9)
+        sk.insert_text((40, 440), "Total Living Area (Rounded)", fontsize=8)
+        sk.insert_text((320, 440), "1650", fontsize=8)
+
+        pg = doc.new_page(width=612, height=792)
+        for x in (20, 105, 195, 320):
+            pg.draw_line((x, 80), (x, 360))
+        pg.insert_text((25, 70), "SALES COMPARISON APPROACH", fontsize=9)
+        pg.insert_text((30, 100), "FEATURE", fontsize=8)
+        pg.insert_text((130, 100), "SUBJECT", fontsize=8)
+        pg.insert_text((215, 100), "COMPARABLE SALE NO. 1", fontsize=8)
+        pg.insert_text((25, 220), "Above Grade", fontsize=7)
+        pg.insert_text((25, 232), "Room Count", fontsize=7)
+        pg.insert_text((112, 220), "Total", fontsize=6)
+        pg.insert_text((138, 220), "Bdrms.", fontsize=6)
+        pg.insert_text((168, 220), "Baths", fontsize=6)
+        pg.insert_text((114, 232), "7", fontsize=7)
+        pg.insert_text((142, 232), "3", fontsize=7)
+        pg.insert_text((170, 232), "1.1", fontsize=7)
+        pg.insert_text((200, 232), "6   3   1.0", fontsize=7)
+
+        tmp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp_pdf.close()
+        doc.save(tmp_pdf.name)
+        doc.close()
+
+        try:
+            parser = XMLAppraisalParser(xml_path)
+            self.assertEqual(parser.metadata["sections"]["sales_grid"]["rooms"], 7)
+            self.assertEqual(parser.metadata["sections"]["sales_grid"]["bedrooms"], 3)
+            self.assertEqual(parser.metadata["sections"]["sales_grid"]["bathrooms"], 1.1)
+            self.assertEqual(parser.metadata["sections"]["sales_grid"]["gla"], 1650.0)
+
+            pdf_m = extract_pdf_form_metrics(tmp_pdf.name)
+            self.assertEqual(pdf_m["sections"]["sketch"]["gla"], 1650)
+            self.assertEqual(pdf_m["sections"]["sketch"]["bedrooms"], 1)
+            self.assertEqual(pdf_m["sections"]["sketch"]["bathrooms"], 1.0)
+            self.assertEqual(pdf_m["sections"]["sketch"]["rooms"], 3)
+            self.assertEqual(pdf_m["sections"]["sales_grid"]["rooms"], 7)
+            self.assertEqual(pdf_m["sections"]["sales_grid"]["bedrooms"], 3)
+            self.assertEqual(pdf_m["sections"]["sales_grid"]["bathrooms"], 1.1)
+        finally:
+            os.remove(xml_path)
+            os.remove(tmp_pdf.name)

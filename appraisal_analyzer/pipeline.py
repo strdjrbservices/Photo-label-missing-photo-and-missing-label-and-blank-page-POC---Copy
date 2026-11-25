@@ -290,6 +290,53 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                                     except Exception:
                                         pass
 
+                    # Sales Grid Above Grade Room Count row strictly inside [subj_x_min, comp1_x_min)
+                    if grid_sec["rooms"] is None or grid_sec["bedrooms"] is None or grid_sec["bathrooms"] is None:
+                        rc_labels = [
+                            w for w in words
+                            if w[4].lower() in ("above", "room")
+                            and w[0] < subj_x_min
+                            and w[1] > subj_header_y
+                        ]
+                        for rl in rc_labels:
+                            ry = rl[1]
+                            feat_rc = " ".join(
+                                w[4].lower() for w in words
+                                if w[0] < subj_x_min and -6 <= (w[1] - ry) <= 16
+                            )
+                            if ("above" in feat_rc and "grade" in feat_rc) or ("room" in feat_rc and "count" in feat_rc):
+                                rc_words = page.get_text("words", clip=pymupdf.Rect(subj_x_min, ry - 4.0, comp1_x_min, ry + 32.0))
+                                # Group words into Y rows
+                                y_buckets = {}
+                                for w in rc_words:
+                                    tok = w[4].strip().replace(",", "")
+                                    if re.fullmatch(r"\d+(?:\.\d+)?", tok):
+                                        bucket_y = next((ky for ky in y_buckets if abs(ky - w[1]) <= 4.0), w[1])
+                                        y_buckets.setdefault(bucket_y, []).append((w[0], tok))
+                                # Find a row with 3 numbers: [Total Rooms, Bedrooms, Bathrooms]
+                                for _, toks in sorted(y_buckets.items()):
+                                    if len(toks) == 3:
+                                        toks.sort(key=lambda t: t[0])
+                                        try:
+                                            r_val, b_val, ba_val = int(float(toks[0][1])), int(float(toks[1][1])), float(toks[2][1])
+                                            if grid_sec["rooms"] is None:
+                                                grid_sec["rooms"] = r_val
+                                            if grid_sec["bedrooms"] is None:
+                                                grid_sec["bedrooms"] = b_val
+                                            if grid_sec["bathrooms"] is None:
+                                                grid_sec["bathrooms"] = ba_val
+                                            if metrics["total_rooms"] is None:
+                                                metrics["total_rooms"] = r_val
+                                            if metrics["bedrooms"] is None:
+                                                metrics["bedrooms"] = b_val
+                                            if metrics["bathrooms"] is None:
+                                                metrics["bathrooms"] = ba_val
+                                            break
+                                        except Exception:
+                                            pass
+                                if grid_sec["rooms"] is not None:
+                                    break
+
                     # Subject column fallback room counts strictly clipped to Subject column [subj_x_min, comp1_x_min)
                     subj_clip = pymupdf.Rect(subj_x_min, subj_header_y, comp1_x_min, page.rect.height)
                     subj_text = " ".join(page.get_text("text", clip=subj_clip).split())
@@ -329,18 +376,25 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                     subj_text = ""
 
                 if subj_text:
-                    m_rc = re.search(r"Total\s+Bdrms\.?\s+Baths\s+(\d+)\s+(\d+)\s+([\d\.]+)", subj_text, re.I)
+                    m_rc = re.search(
+                        r"(?:Total\s+Bdrms\.?\s+Baths\s+(\d+)\s+(\d+)\s+([\d\.]+)|Total\s+(\d+)\s+Bdrms?\.?\s+(\d+)\s+Baths?\s+([\d\.]+))",
+                        subj_text,
+                        re.I,
+                    )
                     if m_rc:
+                        r_v = int(m_rc.group(1) or m_rc.group(4))
+                        b_v = int(m_rc.group(2) or m_rc.group(5))
+                        ba_v = float(m_rc.group(3) or m_rc.group(6))
                         if grid_sec["rooms"] is None:
-                            grid_sec["rooms"] = int(m_rc.group(1))
-                            grid_sec["bedrooms"] = int(m_rc.group(2))
-                            grid_sec["bathrooms"] = float(m_rc.group(3))
+                            grid_sec["rooms"] = r_v
+                            grid_sec["bedrooms"] = b_v
+                            grid_sec["bathrooms"] = ba_v
                         if metrics["total_rooms"] is None:
-                            metrics["total_rooms"] = int(m_rc.group(1))
+                            metrics["total_rooms"] = r_v
                         if metrics["bedrooms"] is None:
-                            metrics["bedrooms"] = int(m_rc.group(2))
+                            metrics["bedrooms"] = b_v
                         if metrics["bathrooms"] is None:
-                            metrics["bathrooms"] = float(m_rc.group(3))
+                            metrics["bathrooms"] = ba_v
                     m_gla = re.search(r"([\d,]+)\s*sq\.?\s*ft", subj_text, re.I)
                     if m_gla and metrics["gross_living_area"] is None:
                         try:
@@ -354,44 +408,96 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
 
         # 3b. Building Sketch / Living Area Calculation Page Extraction
         for p_idx in range(len(doc)):
-            stext = doc[p_idx].get_text()
+            spage = doc[p_idx]
+            stext = spage.get_text()
             stext_lower = stext.lower()
             is_sketch_page = any(
                 kw in stext_lower
-                for kw in ["building sketch", "living area calculation", "area calculations", "floor plan", "gla calculation"]
-            ) and "comparable sale" not in stext_lower
+                for kw in ["building sketch", "living area calculation", "area calculations", "floor plan", "gla calculation", "sketch"]
+            ) and "comparable sale" not in stext_lower and "photo 1" not in stext_lower
             if is_sketch_page:
                 if sketch_sec["page"] is None:
                     sketch_sec["page"] = p_idx + 1
                 if sketch_sec["gla"] is None:
                     for pat in [
-                        r"Total\s+Living\s+Area(?:\s*\([^)]*\))?\s*[:\-]?\s*([\d,]{3,})",
-                        r"Total\s+Building\s+Area(?:\s*\([^)]*\))?\s*[:\-]?\s*([\d,]{3,})",
-                        r"Gross\s+(?:Living|Building)\s+Area\s*[:\-]?\s*([\d,]{3,})",
-                        r"TOTAL\s+GLA\s*[:\-]?\s*([\d,]{3,})",
-                        r"Living\s+Area\s*[:\-]?\s*([\d,]{3,})\s*(?:sq\.?\s*ft\.?|sf)",
+                        r"Total\s+Living\s+Area(?:\s*\([^)]*\))?[\s\S]{0,60}?([\d,]{3,}(?:\.\d+)?)",
+                        r"Total\s+Building\s+Area(?:\s*\([^)]*\))?[\s\S]{0,60}?([\d,]{3,}(?:\.\d+)?)",
+                        r"Gross\s+(?:Living|Building)\s+Area(?:\s*\([^)]*\))?[\s\S]{0,40}?([\d,]{3,}(?:\.\d+)?)",
+                        r"(?:Net|Total)\s+GLA(?:\s*\([^)]*\))?[\s\S]{0,30}?([\d,]{3,}(?:\.\d+)?)",
+                        r"Living\s+Area\s*[:\-=]?\s*([\d,]{3,}(?:\.\d+)?)\s*(?:sq\.?\s*ft\.?|sf)",
                     ]:
                         m_sgla = re.search(pat, stext, re.I)
                         if m_sgla:
                             try:
                                 val = float(m_sgla.group(1).replace(",", ""))
                                 if val >= 200:
-                                    sketch_sec["gla"] = val
+                                    sketch_sec["gla"] = round(val)
                                     break
                             except Exception:
                                 pass
-                if sketch_sec["basement_sqft"] is None:
-                    m_sbsmt = re.search(r"Basement\s*(?:\([^)]*\))?\s*[:\-]?\s*([\d,]{3,})\s*(?:sq\.?\s*ft\.?|sf)?", stext, re.I)
-                    if m_sbsmt:
+                # Coordinate-row fallback on sketch page for table-formatted summary lines
+                if sketch_sec["gla"] is None:
+                    swords = spage.get_text("words")
+                    for idx, w in enumerate(swords):
+                        if w[4].lower() in ("living", "building", "gla") and idx + 1 < len(swords) and swords[idx + 1][4].lower() in ("area", "total", "(rounded)"):
+                            row_line = [rw for rw in swords if abs(rw[1] - w[1]) <= 8]
+                            row_str = " ".join(rw[4].lower() for rw in sorted(row_line, key=lambda x: x[0]))
+                            if any(k in row_str for k in ("total living area", "total building area", "gross living area", "total gla", "living area")):
+                                nums = []
+                                for rw in sorted(row_line, key=lambda x: x[0]):
+                                    if rw[0] > w[0] and re.fullmatch(r"[\d,]{3,}(?:\.\d+)?", rw[4]):
+                                        try:
+                                            v = float(rw[4].replace(",", ""))
+                                            if v >= 200:
+                                                nums.append(v)
+                                        except Exception:
+                                            pass
+                                if nums:
+                                    sketch_sec["gla"] = round(nums[-1])
+                                    break
+                if sketch_sec["gla"] is None and any(k in stext_lower for k in ("living area", "area calculation", "gla")):
+                    m_tot = re.search(r"\bTOTAL(?:\s*\([^)]*\))?[\s\S]{0,25}?([\d,]{3,}(?:\.\d+)?)", stext, re.I)
+                    if m_tot:
                         try:
-                            sketch_sec["basement_sqft"] = int(m_sbsmt.group(1).replace(",", ""))
+                            val = float(m_tot.group(1).replace(",", ""))
+                            if val >= 200:
+                                sketch_sec["gla"] = round(val)
                         except Exception:
                             pass
-                # Only count room labels if individual room tags appear on the sketch canvas
-                lines_clean = [ln.strip().lower() for ln in stext.splitlines() if ln.strip()]
-                sk_beds = sum(1 for ln in lines_clean if re.fullmatch(r"(?:master\s+|primary\s+|unit\s*#?\d*\s*)?(?:bedroom|bdrm|br)(?:\s*\d+)?", ln))
-                sk_baths = sum(1 for ln in lines_clean if re.fullmatch(r"(?:master\s+|primary\s+|full\s+|half\s+|1/2\s+|unit\s*#?\d*\s*)?(?:bath|bathroom|bth|ba)(?:\s*\d+)?", ln))
-                sk_other = sum(1 for ln in lines_clean if re.fullmatch(r"(?:unit\s*#?\d*\s*)?(?:kitchen|living\s*room|living|dining\s*room|dining|family\s*room|den|office|sunroom|solarium|mudroom|mud\s*room|foyer)(?:\s*\d+)?", ln))
+                if sketch_sec["basement_sqft"] is None:
+                    m_sbsmt = re.search(r"Basement\s*(?:\([^)]*\))?[\s\S]{0,30}?([\d,]{3,}(?:\.\d+)?)\s*(?:sq\.?\s*ft\.?|sf)?", stext, re.I)
+                    if m_sbsmt:
+                        try:
+                            val = float(m_sbsmt.group(1).replace(",", ""))
+                            if val >= 50:
+                                sketch_sec["basement_sqft"] = int(round(val))
+                        except Exception:
+                            pass
+                # Count individual room labels across separated text segments/spans on sketch canvas
+                s_segments = []
+                try:
+                    sdict = spage.get_text("dict")
+                    for blk in sdict.get("blocks", []):
+                        for ln_obj in blk.get("lines", []):
+                            seg_txt = " ".join(sp.get("text", "").strip() for sp in ln_obj.get("spans", []) if sp.get("text", "").strip()).strip().lower()
+                            if seg_txt:
+                                s_segments.append(seg_txt)
+                except Exception:
+                    s_segments = [ln.strip().lower() for ln in stext.splitlines() if ln.strip()]
+
+                sk_beds = 0
+                sk_baths = 0
+                sk_other = 0
+                skip_sketch_words = ("living area", "building area", "total area", "gross", "calculation", "rounding", "scale", "sketch", "floor ", "basement", "garage", "porch", "patio", "deck", "sq ft", "sqft")
+                for seg in s_segments:
+                    if len(seg) > 45 or any(sw in seg for sw in skip_sketch_words):
+                        continue
+                    if re.search(r"\b(?:bedroom|bdrm|br)\b", seg) and "bath" not in seg:
+                        sk_beds += 1
+                    elif re.search(r"\b(?:full\s*bath|half\s*bath|1/2\s*bath|3/4\s*bath|master\s*bath|primary\s*bath|bathroom|bath|bth)\b", seg):
+                        sk_baths += 1
+                    elif re.search(r"\b(?:kitchen|kit|living\s*(?:rm|room)?|dining\s*(?:rm|room)?|family\s*(?:rm|room)?|great\s*room|den|office|study|sunroom|solarium|mudroom|mud\s*room|foyer)\b", seg):
+                        sk_other += 1
                 if sk_beds > 0 and sketch_sec["bedrooms"] is None:
                     sketch_sec["bedrooms"] = sk_beds
                 if sk_baths > 0 and sketch_sec["bathrooms"] is None:
