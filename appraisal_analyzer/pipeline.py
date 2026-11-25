@@ -407,103 +407,186 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                             pass
 
         # 3b. Building Sketch / Living Area Calculation Page Extraction
+        total_sk_beds = 0
+        total_sk_full_baths = 0
+        total_sk_half_baths = 0
+        total_sk_other = 0
+        reject_sketch_markers = (
+            "comparable sale",
+            "sales comparison approach",
+            "cost approach",
+            "income approach",
+            "reconciliation",
+            "appraiser's certification",
+            "limiting conditions",
+            "definition of market value",
+            "present land use",
+            "photo 1",
+            "subject photo",
+            "location map",
+            "plat map",
+            "flood map",
+            "aerial map",
+            "parcel map",
+        )
+        strong_sketch_markers = (
+            "building sketch",
+            "living area calculation",
+            "area calculations summary",
+            "area calculation",
+            "floor plan",
+            "floorplan",
+            "gla calculation",
+            "form skt",
+            "sketch addendum",
+        )
+
         for p_idx in range(len(doc)):
             spage = doc[p_idx]
             stext = spage.get_text()
             stext_lower = stext.lower()
-            is_sketch_page = any(
-                kw in stext_lower
-                for kw in ["building sketch", "living area calculation", "area calculations", "floor plan", "gla calculation", "sketch"]
-            ) and "comparable sale" not in stext_lower and "photo 1" not in stext_lower
-            if is_sketch_page:
-                if sketch_sec["page"] is None:
-                    sketch_sec["page"] = p_idx + 1
-                if sketch_sec["gla"] is None:
+            if any(bad in stext_lower for bad in reject_sketch_markers):
+                continue
+
+            page_h = spage.rect.height or 792.0
+            has_strong_marker = any(kw in stext_lower for kw in strong_sketch_markers)
+            has_header_sketch = False
+            if not has_strong_marker and "sketch" in stext_lower:
+                for w in spage.get_text("words"):
+                    if "sketch" in w[4].lower() and w[1] < page_h * 0.22:
+                        has_header_sketch = True
+                        break
+
+            if not (has_strong_marker or has_header_sketch):
+                continue
+
+            if sketch_sec["page"] is None:
+                sketch_sec["page"] = p_idx + 1
+
+            # Extract GLA strictly on the same horizontal row (never bridge across arbitrary blocks or $ amounts)
+            swords = spage.get_text("words")
+            if sketch_sec["gla"] is None:
+                # 1. Exact same-line regex (no newlines bridged, reject $ prices, max 25000 sq ft)
+                for line_str in stext.splitlines():
+                    ln_l = line_str.lower()
+                    if any(skip in ln_l for skip in ("lot", "site", "serial", "$", "cost", "value", "price")):
+                        continue
                     for pat in [
-                        r"Total\s+Living\s+Area(?:\s*\([^)]*\))?[\s\S]{0,60}?([\d,]{3,}(?:\.\d+)?)",
-                        r"Total\s+Building\s+Area(?:\s*\([^)]*\))?[\s\S]{0,60}?([\d,]{3,}(?:\.\d+)?)",
-                        r"Gross\s+(?:Living|Building)\s+Area(?:\s*\([^)]*\))?[\s\S]{0,40}?([\d,]{3,}(?:\.\d+)?)",
-                        r"(?:Net|Total)\s+GLA(?:\s*\([^)]*\))?[\s\S]{0,30}?([\d,]{3,}(?:\.\d+)?)",
-                        r"Living\s+Area\s*[:\-=]?\s*([\d,]{3,}(?:\.\d+)?)\s*(?:sq\.?\s*ft\.?|sf)",
+                        r"(?:Total\s+Living\s+Area|Total\s+Building\s+Area|Total\s+GLA|Gross\s+Living\s+Area|Gross\s+Building\s+Area|Net\s+Living\s+Area)(?:\s*\([^)]*\))?\s*[:\-=]?\s*(?<!\$)([\d,]{3,}(?:\.\d+)?)",
+                        r"Living\s+Area\s*[:\-=]?\s*(?<!\$)([\d,]{3,}(?:\.\d+)?)\s*(?:sq\.?\s*ft\.?|sf)\b",
                     ]:
-                        m_sgla = re.search(pat, stext, re.I)
+                        m_sgla = re.search(pat, line_str, re.I)
                         if m_sgla:
                             try:
                                 val = float(m_sgla.group(1).replace(",", ""))
-                                if val >= 200:
+                                if 200 <= val <= 25000:
                                     sketch_sec["gla"] = round(val)
                                     break
                             except Exception:
                                 pass
-                # Coordinate-row fallback on sketch page for table-formatted summary lines
-                if sketch_sec["gla"] is None:
-                    swords = spage.get_text("words")
-                    for idx, w in enumerate(swords):
-                        if w[4].lower() in ("living", "building", "gla") and idx + 1 < len(swords) and swords[idx + 1][4].lower() in ("area", "total", "(rounded)"):
-                            row_line = [rw for rw in swords if abs(rw[1] - w[1]) <= 8]
-                            row_str = " ".join(rw[4].lower() for rw in sorted(row_line, key=lambda x: x[0]))
-                            if any(k in row_str for k in ("total living area", "total building area", "gross living area", "total gla", "living area")):
-                                nums = []
-                                for rw in sorted(row_line, key=lambda x: x[0]):
-                                    if rw[0] > w[0] and re.fullmatch(r"[\d,]{3,}(?:\.\d+)?", rw[4]):
-                                        try:
-                                            v = float(rw[4].replace(",", ""))
-                                            if v >= 200:
-                                                nums.append(v)
-                                        except Exception:
-                                            pass
-                                if nums:
-                                    sketch_sec["gla"] = round(nums[-1])
-                                    break
-                if sketch_sec["gla"] is None and any(k in stext_lower for k in ("living area", "area calculation", "gla")):
-                    m_tot = re.search(r"\bTOTAL(?:\s*\([^)]*\))?[\s\S]{0,25}?([\d,]{3,}(?:\.\d+)?)", stext, re.I)
-                    if m_tot:
-                        try:
-                            val = float(m_tot.group(1).replace(",", ""))
-                            if val >= 200:
-                                sketch_sec["gla"] = round(val)
-                        except Exception:
-                            pass
-                if sketch_sec["basement_sqft"] is None:
-                    m_sbsmt = re.search(r"Basement\s*(?:\([^)]*\))?[\s\S]{0,30}?([\d,]{3,}(?:\.\d+)?)\s*(?:sq\.?\s*ft\.?|sf)?", stext, re.I)
+                    if sketch_sec["gla"] is not None:
+                        break
+
+            # 2. Horizontal word-row table lookup (e.g. "Total Living Area (Rounded)" ... "1650" on same Y row)
+            if sketch_sec["gla"] is None:
+                for idx, w in enumerate(swords):
+                    if w[4].lower() in ("living", "building", "gla", "total"):
+                        row_line = sorted([rw for rw in swords if abs(rw[1] - w[1]) <= 8], key=lambda x: x[0])
+                        row_str = " ".join(rw[4].lower() for rw in row_line)
+                        if any(skip in row_str for skip in ("lot", "site", "$", "cost", "value", "price")):
+                            continue
+                        is_gla_row = any(
+                            k in row_str
+                            for k in ("total living area", "total building area", "gross living area", "gross building area", "total gla", "net living area")
+                        ) or (
+                            w[4].lower() == "total"
+                            and any(k in stext_lower for k in ("area calculations", "living area calculation", "living area"))
+                            and len(row_line) <= 6
+                        )
+                        if is_gla_row:
+                            nums = []
+                            for rw in row_line:
+                                if rw[0] > w[0] and "$" not in rw[4] and re.fullmatch(r"[\d,]{3,}(?:\.\d+)?", rw[4]):
+                                    try:
+                                        v = float(rw[4].replace(",", ""))
+                                        if 200 <= v <= 25000:
+                                            nums.append(v)
+                                    except Exception:
+                                        pass
+                            if nums:
+                                sketch_sec["gla"] = round(nums[-1])
+                                break
+
+            if sketch_sec["basement_sqft"] is None:
+                for line_str in stext.splitlines():
+                    if "$" in line_str:
+                        continue
+                    m_sbsmt = re.search(r"\bBasement\b(?:\s*\([^)]*\))?\s*[:\-=]?\s*([\d,]{2,}(?:\.\d+)?)\s*(?:sq\.?\s*ft\.?|sf)?", line_str, re.I)
                     if m_sbsmt:
                         try:
                             val = float(m_sbsmt.group(1).replace(",", ""))
-                            if val >= 50:
+                            if 50 <= val <= 20000:
                                 sketch_sec["basement_sqft"] = int(round(val))
+                                break
                         except Exception:
                             pass
-                # Count individual room labels across separated text segments/spans on sketch canvas
-                s_segments = []
-                try:
-                    sdict = spage.get_text("dict")
-                    for blk in sdict.get("blocks", []):
-                        for ln_obj in blk.get("lines", []):
-                            seg_txt = " ".join(sp.get("text", "").strip() for sp in ln_obj.get("spans", []) if sp.get("text", "").strip()).strip().lower()
-                            if seg_txt:
-                                s_segments.append(seg_txt)
-                except Exception:
-                    s_segments = [ln.strip().lower() for ln in stext.splitlines() if ln.strip()]
 
-                sk_beds = 0
-                sk_baths = 0
-                sk_other = 0
-                skip_sketch_words = ("living area", "building area", "total area", "gross", "calculation", "rounding", "scale", "sketch", "floor ", "basement", "garage", "porch", "patio", "deck", "sq ft", "sqft")
-                for seg in s_segments:
-                    if len(seg) > 45 or any(sw in seg for sw in skip_sketch_words):
-                        continue
-                    if re.search(r"\b(?:bedroom|bdrm|br)\b", seg) and "bath" not in seg:
-                        sk_beds += 1
-                    elif re.search(r"\b(?:full\s*bath|half\s*bath|1/2\s*bath|3/4\s*bath|master\s*bath|primary\s*bath|bathroom|bath|bth)\b", seg):
-                        sk_baths += 1
-                    elif re.search(r"\b(?:kitchen|kit|living\s*(?:rm|room)?|dining\s*(?:rm|room)?|family\s*(?:rm|room)?|great\s*room|den|office|study|sunroom|solarium|mudroom|mud\s*room|foyer)\b", seg):
-                        sk_other += 1
-                if sk_beds > 0 and sketch_sec["bedrooms"] is None:
-                    sketch_sec["bedrooms"] = sk_beds
-                if sk_baths > 0 and sketch_sec["bathrooms"] is None:
-                    sketch_sec["bathrooms"] = float(sk_baths)
-                if (sk_beds + sk_other) > 0 and sketch_sec["rooms"] is None:
-                    sketch_sec["rooms"] = sk_beds + sk_other
+            # Split separated spans on the sketch canvas so side-by-side labels count individually
+            s_segments = []
+            try:
+                sdict = spage.get_text("dict")
+                for blk in sdict.get("blocks", []):
+                    for ln_obj in blk.get("lines", []):
+                        spans = [sp for sp in ln_obj.get("spans", []) if sp.get("text", "").strip()]
+                        if not spans:
+                            continue
+                        spans.sort(key=lambda sp: sp["bbox"][0])
+                        curr_parts = [spans[0]["text"].strip()]
+                        prev_x1 = spans[0]["bbox"][2]
+                        for sp in spans[1:]:
+                            gap = sp["bbox"][0] - prev_x1
+                            if gap > 12.0:
+                                s_segments.append(" ".join(curr_parts).lower())
+                                curr_parts = [sp["text"].strip()]
+                            else:
+                                curr_parts.append(sp["text"].strip())
+                            prev_x1 = max(prev_x1, sp["bbox"][2])
+                        if curr_parts:
+                            s_segments.append(" ".join(curr_parts).lower())
+            except Exception:
+                s_segments = [ln.strip().lower() for ln in stext.splitlines() if ln.strip()]
+
+            skip_sketch_words = (
+                "living area", "building area", "total area", "gross", "calculation",
+                "rounding", "scale", "sketch", "floor ", "first floor", "second floor",
+                "basement", "bsmt", "garage", "carport", "porch", "patio", "deck",
+                "sq ft", "sqft", "sq. ft", "bed/bath", "bedrooms", "bathrooms", "total rooms",
+            )
+            for seg in s_segments:
+                if len(seg) > 40 or any(sw in seg for sw in skip_sketch_words):
+                    continue
+                # Strip trailing dimensions like "12x14" or "12' x 10'"
+                clean_seg = re.sub(r"\b\d+(?:\.\d+)?\s*['\"]?\s*[x×]\s*\d+(?:\.\d+)?\s*['\"]?", "", seg).strip()
+                if not clean_seg:
+                    continue
+                if re.search(r"\b(?:bedroom|bdrm|bdr|bed|mbr)\b|\bbr\s*\d*\b", clean_seg) and "bath" not in clean_seg:
+                    total_sk_beds += 1
+                elif re.search(r"\b(?:half\s*bath|1/2\s*bath|1/2\s*ba|half\s*ba|powder(?:\s*(?:rm|room))?|lavatory|lav)\b", clean_seg):
+                    total_sk_half_baths += 1
+                elif re.search(r"\b(?:full\s*bath|master\s*bath|primary\s*bath|mbath|bathroom|bath|bth)\b|\bba\s*\d*\b", clean_seg):
+                    total_sk_full_baths += 1
+                elif re.search(
+                    r"\b(?:kitchen|kit|living(?:\s*(?:rm|room))?|liv(?:\s*rm)?|lr|dining(?:\s*(?:rm|room))?|din(?:\s*rm)?|dr|family(?:\s*(?:rm|room))?|fam(?:\s*rm)?|fr|great\s*room|den|office|study|library|sunroom|solarium|mudroom|mud\s*rm)\b",
+                    clean_seg,
+                ) and not any(bad in clean_seg for bad in ("drive", "door", "dryer", "front", "drain")):
+                    total_sk_other += 1
+
+        if total_sk_beds > 0:
+            sketch_sec["bedrooms"] = total_sk_beds
+        if (total_sk_full_baths + total_sk_half_baths) > 0:
+            sketch_sec["bathrooms"] = round(total_sk_full_baths + 0.1 * total_sk_half_baths, 1)
+        if (total_sk_beds + total_sk_other) > 0:
+            sketch_sec["rooms"] = total_sk_beds + total_sk_other
 
         # 4. Appraised Value extraction across document
         target_val_keywords = [

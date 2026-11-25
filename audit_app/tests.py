@@ -353,11 +353,49 @@ class MultiSourceReconciliationAccuracyTests(TestCase):
             pdf_m = extract_pdf_form_metrics(tmp_pdf.name)
             self.assertEqual(pdf_m["sections"]["sketch"]["gla"], 1650)
             self.assertEqual(pdf_m["sections"]["sketch"]["bedrooms"], 1)
-            self.assertEqual(pdf_m["sections"]["sketch"]["bathrooms"], 1.0)
+            self.assertEqual(pdf_m["sections"]["sketch"]["bathrooms"], 0.1)
             self.assertEqual(pdf_m["sections"]["sketch"]["rooms"], 3)
             self.assertEqual(pdf_m["sections"]["sales_grid"]["rooms"], 7)
             self.assertEqual(pdf_m["sections"]["sales_grid"]["bedrooms"], 3)
             self.assertEqual(pdf_m["sections"]["sales_grid"]["bathrooms"], 1.1)
         finally:
             os.remove(xml_path)
+            os.remove(tmp_pdf.name)
+
+    def test_sketch_ignores_cost_approach_35000_false_positive_and_counts_uad_rooms(self):
+        doc = pymupdf.open()
+        # Page 1: Improvements / Site mentions "sketch" and 35000 Cost Approach
+        p1 = doc.new_page(width=612, height=792)
+        p1.insert_text((40, 60), "COST APPROACH TO VALUE", fontsize=10)
+        p1.insert_text((40, 90), "Living Area: see attached sketch   $35,000", fontsize=8)
+        p1.insert_text((40, 110), "Site Area 35000 sq ft", fontsize=8)
+        p1.insert_text((40, 130), "Bath", fontsize=8)
+
+        # Page 2: Real Building Sketch with separated room labels & Full + Half Bath
+        sk = doc.new_page(width=612, height=792)
+        sk.insert_text((40, 45), "BUILDING SKETCH", fontsize=11)
+        sk.insert_text((80, 140), "Bedroom 1 12x14", fontsize=8)
+        sk.insert_text((240, 140), "BR 2 10x11", fontsize=8)
+        sk.insert_text((80, 180), "Living Room", fontsize=8)
+        sk.insert_text((240, 180), "Kitchen", fontsize=8)
+        sk.insert_text((80, 220), "Dining Rm", fontsize=8)
+        sk.insert_text((240, 220), "Full Bath", fontsize=8)
+        sk.insert_text((360, 220), "Half Bath", fontsize=8)
+        sk.insert_text((40, 420), "AREA CALCULATIONS SUMMARY", fontsize=9)
+        sk.insert_text((40, 440), "Total Living Area (Rounded)", fontsize=8)
+        sk.insert_text((320, 440), "1,650", fontsize=8)
+
+        tmp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp_pdf.close()
+        doc.save(tmp_pdf.name)
+        doc.close()
+        try:
+            m = extract_pdf_form_metrics(tmp_pdf.name)
+            sk_sec = m["sections"]["sketch"]
+            self.assertEqual(sk_sec["page"], 2)
+            self.assertEqual(sk_sec["gla"], 1650)
+            self.assertEqual(sk_sec["bedrooms"], 2)
+            self.assertEqual(sk_sec["bathrooms"], 1.1)
+            self.assertEqual(sk_sec["rooms"], 5)
+        finally:
             os.remove(tmp_pdf.name)
