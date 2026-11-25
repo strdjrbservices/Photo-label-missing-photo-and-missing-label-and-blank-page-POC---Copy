@@ -46,14 +46,20 @@ class GroupPhotoFilteringTests(TestCase):
                 has_image=True,
             )
 
-    def test_total_rooms_group_includes_subject_front_rear_street(self):
+    def test_total_rooms_excludes_subject_exterior_which_has_own_group(self):
         resp = self.client.get(reverse("audit_detail", args=[self.audit.id]))
         self.assertEqual(resp.status_code, 200)
         total_room_photos = resp.context["total_room_photos"]
         labels = [s.raw_label for s in total_room_photos]
-        self.assertIn("FRONT VIEW OF", labels)
-        self.assertIn("REAR VIEW OF", labels)
-        self.assertIn("STREET SCENE", labels)
+        # Subject Front, Rear, Street removed from Total Rooms
+        self.assertNotIn("FRONT VIEW OF", labels)
+        self.assertNotIn("REAR VIEW OF", labels)
+        self.assertNotIn("STREET SCENE", labels)
+        # Dedicated Subject Front / Rear / Street group
+        subj_ext_labels = [s.raw_label for s in resp.context["subject_exterior_photos"]]
+        self.assertEqual(subj_ext_labels, ["FRONT VIEW OF", "REAR VIEW OF", "STREET SCENE"])
+        self.assertContains(resp, "Subject Front / Rear / Street:")
+        self.assertContains(resp, "showGroupPhotos('subject_exterior', 'Subject Front, Rear &amp; Street')")
         self.assertIn("Unit #1 Kitchen", labels)
         self.assertIn("Unit #1 Living room", labels)
         self.assertIn("Solarium", labels)

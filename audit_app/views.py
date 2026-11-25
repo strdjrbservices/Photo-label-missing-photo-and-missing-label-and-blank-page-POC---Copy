@@ -106,6 +106,7 @@ def audit_detail_view(request, audit_id):
     bedroom_photos = []
     bathroom_photos = []
     garage_photos = []
+    subject_exterior_photos = []
     total_room_photos = []
 
     def _classify_slot(slot):
@@ -118,6 +119,10 @@ def audit_detail_view(request, audit_id):
         is_rec = any(w in raw_l for w in ['rec', 'recreation', 'playroom']) or (is_bsmt and any(w in raw_l for w in ['living', 'family', 'den']))
         is_comp = any(c in raw_l or c in norm_l for c in ['comparable', 'comp ', 'rental'])
         is_garage = (any(g in raw_l or g in norm_l for g in ['garage', 'carport']) or norm_l == 'garage') and not is_comp
+        is_subject_exterior = (
+            norm_l in ['exterior front', 'exterior rear', 'street view']
+            or any(k in raw_l for k in ['front view', 'rear view', 'street scene', 'subject front', 'subject rear', 'subject street'])
+        ) and not is_comp
 
         groups = []
         if is_bsmt:
@@ -135,6 +140,8 @@ def audit_detail_view(request, audit_id):
             groups.append('bathrooms')
         if is_garage:
             groups.append('garage')
+        if is_subject_exterior:
+            groups.append('subject_exterior')
 
         excluded_from_total_rooms = is_bed or is_bath or (is_bsmt and is_rec) or (is_bsmt and is_bed) or (is_bsmt and is_bath)
         is_room_keyword = any(k in raw_l or k in norm_l for k in [
@@ -142,12 +149,8 @@ def audit_detail_view(request, audit_id):
             'solarium', 'mudroom', 'mud room',
             'foyer', 'hall', 'room', 'area', 'nook', 'great room', 'library', 'bonus', 'loft'
         ])
-        is_subject_exterior = (
-            norm_l in ['exterior front', 'exterior rear', 'street view']
-            or any(k in raw_l for k in ['front view', 'rear view', 'street scene', 'subject front', 'subject rear', 'subject street'])
-        ) and not is_comp
 
-        if not excluded_from_total_rooms and (is_room_keyword or is_subject_exterior or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office', 'solarium', 'mudroom']):
+        if not excluded_from_total_rooms and (is_room_keyword or norm_l in ['kitchen', 'living room', 'dining room', 'family room', 'den', 'office', 'solarium', 'mudroom']):
             groups.append('total_rooms')
 
         return groups
@@ -171,6 +174,8 @@ def audit_detail_view(request, audit_id):
             bathroom_photos.append(slot)
         if 'garage' in groups:
             garage_photos.append(slot)
+        if 'subject_exterior' in groups:
+            subject_exterior_photos.append(slot)
         if 'total_rooms' in groups:
             total_room_photos.append(slot)
 
@@ -205,6 +210,7 @@ def audit_detail_view(request, audit_id):
         'bedroom_photos': bedroom_photos,
         'bathroom_photos': bathroom_photos,
         'garage_photos': garage_photos,
+        'subject_exterior_photos': subject_exterior_photos,
         'total_room_photos': total_room_photos,
         'basement_photos': basement_photos,
         'basement_bedroom_photos': basement_bedroom_photos,

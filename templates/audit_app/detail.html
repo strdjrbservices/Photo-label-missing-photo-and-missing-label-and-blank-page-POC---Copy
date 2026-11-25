@@ -156,7 +156,7 @@
             </div>
             <div class="row g-2">
                 <div class="col-sm-6">
-                    <div class="d-flex justify-content-between align-items-center audit-card-row" onclick="showGroupPhotos('total_rooms', 'Total Rooms (Excl. BR, BA, Bsmt RR/BR/BA)')" title="Click to view non-bedroom/non-bathroom room photos + subject exterior">
+                    <div class="d-flex justify-content-between align-items-center audit-card-row" onclick="showGroupPhotos('total_rooms', 'Total Rooms (Excl. BR, BA, Bsmt RR/BR/BA)')" title="Click to view non-bedroom/non-bathroom room photos">
                         <span class="text-muted"><i class="bi bi-house-door text-primary me-1"></i>Total Rooms:</span>
                         <span class="d-inline-flex align-items-center gap-1 flex-nowrap">
                             <span class="fw-bold text-dark">{{ audit.total_rooms|default:"-" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
@@ -223,6 +223,14 @@
                         <span class="d-inline-flex align-items-center gap-1 flex-nowrap">
                             <span class="fw-bold text-dark">{{ audit.basement_other|default:"0" }} {% if audit.report_type == 'XML' %}XML{% else %}PDF{% endif %} &harr;</span>
                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge"><i class="bi bi-images me-1"></i>{{ basement_other_photos|length }} Photos</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center audit-card-row" onclick="showGroupPhotos('subject_exterior', 'Subject Front, Rear & Street')" title="Click to view Subject Front, Subject Rear, and Street View photos">
+                        <span class="text-muted"><i class="bi bi-geo-alt text-primary me-1"></i>Subject Front / Rear / Street:</span>
+                        <span class="d-inline-flex align-items-center gap-1 flex-nowrap">
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle group-photo-badge"><i class="bi bi-images me-1"></i>{{ subject_exterior_photos|length }} Photos</span>
                         </span>
                     </div>
                 </div>
@@ -615,6 +623,9 @@
                         </button>
                         <button type="button" class="btn btn-xs btn-outline-secondary group-pill" id="pill-garage" onclick="filterGalleryToGroup('garage', 'Garage')">
                             Garage ({{ garage_photos|length }})
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-primary group-pill" id="pill-subject_exterior" onclick="filterGalleryToGroup('subject_exterior', 'Subject Front, Rear & Street')">
+                            Front / Rear / Street ({{ subject_exterior_photos|length }})
                         </button>
                     </div>
                 </div>
@@ -1355,7 +1366,7 @@
         
         if (groupKey === 'total_rooms') {
             alertBox.classList.remove('d-none');
-            alertText.textContent = "Showing subject front, rear, and street photos along with living rooms, kitchens, dining rooms, and general living spaces (excluding bedrooms, bathrooms, and basement rr/br/bath).";
+            alertText.textContent = "Showing all photos representing living rooms, kitchens, dining rooms, and general living spaces (excluding bedrooms, bathrooms, and basement rr/br/bath).";
         } else {
             alertBox.classList.add('d-none');
         }

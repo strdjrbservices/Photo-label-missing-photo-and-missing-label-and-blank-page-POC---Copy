@@ -319,6 +319,12 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                             grid_sec["rooms"] = u_rooms
                             grid_sec["bedrooms"] = u_beds
                             grid_sec["bathrooms"] = round(u_baths, 2)
+                            if metrics["total_rooms"] is None:
+                                metrics["total_rooms"] = grid_sec["rooms"]
+                            if metrics["bedrooms"] is None:
+                                metrics["bedrooms"] = grid_sec["bedrooms"]
+                            if metrics["bathrooms"] is None:
+                                metrics["bathrooms"] = grid_sec["bathrooms"]
                 else:
                     subj_text = ""
 
