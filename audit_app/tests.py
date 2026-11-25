@@ -188,3 +188,102 @@ class SubjectColumnBasementExtractionTests(TestCase):
             self.assertEqual(m["basement_other"], 1)
         finally:
             os.remove(pdf_path)
+
+
+class MultiSourceReconciliationAccuracyTests(TestCase):
+    def test_pdf_extracts_form1025_gba_unit_breakdown_and_sketch_independently(self):
+        doc = pymupdf.open()
+        # Page 1: Building Sketch Canvas
+        sk = doc.new_page(width=612, height=792)
+        sk.insert_text((40, 50), "BUILDING SKETCH", fontsize=11)
+        sk.insert_text((40, 80), "Living Area Calculation", fontsize=9)
+        sk.insert_text((40, 100), "Total Building Area: 2,256 Sq. Ft.", fontsize=9)
+        sk.insert_text((40, 120), "Basement: 1,200 Sq. Ft.", fontsize=9)
+
+        # Page 2: Sales Comparison Grid (Form 1025)
+        pg = doc.new_page(width=612, height=792)
+        for x in (20, 105, 190, 320, 450):
+            pg.draw_line((x, 80), (x, 380))
+        pg.insert_text((25, 70), "SALES COMPARISON APPROACH", fontsize=9)
+        pg.insert_text((30, 100), "FEATURE", fontsize=8)
+        pg.insert_text((130, 100), "SUBJECT", fontsize=8)
+        pg.insert_text((210, 100), "COMPARABLE SALE NO. 1", fontsize=8)
+        pg.insert_text((25, 220), "Gross Building Area 90", fontsize=7)
+        pg.insert_text((112, 220), "2,256", fontsize=7)
+        pg.insert_text((195, 220), "1,871", fontsize=7)
+        pg.insert_text((25, 240), "Unit Breakdown", fontsize=7)
+        pg.insert_text((25, 255), "Unit # 1", fontsize=7)
+        pg.insert_text((112, 255), "5    3    1.0", fontsize=7)
+        pg.insert_text((195, 255), "4    1    1.0", fontsize=7)
+        pg.insert_text((25, 270), "Unit # 2", fontsize=7)
+        pg.insert_text((112, 270), "5    3    1.0", fontsize=7)
+        pg.insert_text((195, 270), "5    3    1.0", fontsize=7)
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp.close()
+        doc.save(tmp.name)
+        doc.close()
+        try:
+            m = extract_pdf_form_metrics(tmp.name)
+            secs = m["sections"]
+            self.assertEqual(secs["sketch"]["gla"], 2256.0)
+            self.assertEqual(secs["sketch"]["basement_sqft"], 1200)
+            self.assertEqual(secs["sales_grid"]["gla"], 2256.0)
+            self.assertEqual(secs["sales_grid"]["rooms"], 10)
+            self.assertEqual(secs["sales_grid"]["bedrooms"], 6)
+            self.assertEqual(secs["sales_grid"]["bathrooms"], 2.0)
+        finally:
+            os.remove(tmp.name)
+
+    def test_reconciliation_statuses_are_truthful_not_hardcoded(self):
+        audit = ReportAudit.objects.create(
+            file_name="accuracy_check.xml",
+            status="COMPLETED",
+            total_rooms=10,
+            total_bedrooms=6,
+            total_bathrooms=1.0,
+            gross_living_area=None,
+            basement_rr=1,
+            basement_br=0,
+            basement_ba=1.0,
+            basement_other=1,
+            basement_total_sqft=1200,
+            basement_finished_sqft=840,
+            basement_rooms_summary="1rr0br1.0ba1o",
+            raw_data={
+                "summary": {
+                    "xml_property_metadata": {
+                        "sections": {
+                            "sketch": {"gla": None, "rooms": None, "bedrooms": None, "bathrooms": None},
+                            "improvements": {"gla": None, "rooms": 10, "bedrooms": 6, "bathrooms": 1.0},
+                            "sales_grid": {"gla": None, "rooms": 10, "bedrooms": 6, "bathrooms": 2.0},
+                        }
+                    }
+                }
+            },
+        )
+        # 11 room photos + 3 basement other photos
+        for i in range(6):
+            AuditPhotoSlot.objects.create(report=audit, page_number=15, slot_name=f"Bed{i}", raw_label="BEDROOM", normalized_label="Bedroom", status="LABELED", has_image=True)
+        for i in range(4):
+            AuditPhotoSlot.objects.create(report=audit, page_number=16, slot_name=f"Liv{i}", raw_label="Living Room", normalized_label="Living Room", status="LABELED", has_image=True)
+        AuditPhotoSlot.objects.create(report=audit, page_number=17, slot_name="BKit", raw_label="BASEMENT KITCHEN", normalized_label="Kitchen", status="LABELED", has_image=True)
+        AuditPhotoSlot.objects.create(report=audit, page_number=17, slot_name="BRec", raw_label="BASEMENT REC ROOM", normalized_label="Basement", status="LABELED", has_image=True)
+        AuditPhotoSlot.objects.create(report=audit, page_number=17, slot_name="BBath", raw_label="BASEMENT FULL BATHROOM", normalized_label="Bathroom", status="LABELED", has_image=True)
+        AuditPhotoSlot.objects.create(report=audit, page_number=17, slot_name="BOth1", raw_label="BASEMENT STOVE", normalized_label="Basement", status="LABELED", has_image=True)
+        AuditPhotoSlot.objects.create(report=audit, page_number=17, slot_name="BOth2", raw_label="BASEMENT STOVE", normalized_label="Basement", status="LABELED", has_image=True)
+
+        resp = self.client.get(reverse("audit_detail", args=[audit.id]))
+        self.assertEqual(resp.status_code, 200)
+        rec = resp.context["reconciliation"]
+        # Missing GLA must show N/A, never fake Imp <-> Grid Match
+        self.assertEqual(rec["gla"]["status"], "N/A")
+        # Imp (1.0) vs Sales Grid (2.0) must show Form Discrepancy
+        self.assertEqual(rec["bathrooms"]["status"], "Form Discrepancy")
+        # 10 declared vs 11 room photos must show Photo Variance
+        self.assertEqual(rec["total_rooms"]["status"], "Photo Variance")
+        # Basement shows actual photo counts & Photo Variance (Other: 3 photos vs 1 in grid)
+        self.assertEqual(rec["basement"]["photo_total"], 5)
+        self.assertEqual(rec["basement"]["photo_other"], 3)
+        self.assertEqual(rec["basement"]["status"], "Photo Variance")
+        self.assertNotContains(resp, "Visual Only\n")

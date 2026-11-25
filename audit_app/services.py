@@ -64,8 +64,8 @@ def run_audit_service(
         audit.state = xml_meta.get('state')
         audit.postal_code = xml_meta.get('zip_code') or xml_meta.get('postal_code')
         audit.total_rooms = xml_meta.get('total_rooms')
-        audit.total_bedrooms = xml_meta.get('bedrooms') or xml_meta.get('total_bedrooms')
-        audit.total_bathrooms = xml_meta.get('bathrooms') or xml_meta.get('total_bathrooms')
+        audit.total_bedrooms = xml_meta.get('bedrooms') if xml_meta.get('bedrooms') is not None else xml_meta.get('total_bedrooms')
+        audit.total_bathrooms = xml_meta.get('bathrooms') if xml_meta.get('bathrooms') is not None else xml_meta.get('total_bathrooms')
         audit.gross_living_area = xml_meta.get('gross_living_area')
         audit.appraised_value = str(xml_meta.get('appraised_value')) if xml_meta.get('appraised_value') is not None else None
 

@@ -62,6 +62,22 @@ class XMLAppraisalParser:
             "basement_rooms_summary": None,
             "has_embedded_pdf": False,
             "pdf_bytes": None,
+            "sections": {
+                "improvements": {
+                    "gla": None,
+                    "rooms": None,
+                    "bedrooms": None,
+                    "bathrooms": None,
+                    "basement_sqft": None,
+                    "basement_finished_sqft": None,
+                },
+                "sales_grid": {
+                    "gla": None,
+                    "rooms": None,
+                    "bedrooms": None,
+                    "bathrooms": None,
+                },
+            },
         }
 
         def _walk(elem: ET.Element, in_comp: bool = False):
@@ -93,28 +109,45 @@ class XMLAppraisalParser:
                     if attrib.get("_PostalCode") and not data["postal_code"]:
                         data["postal_code"] = attrib.get("_PostalCode")
 
-                # Structure information (Subject Rooms, Beds, Baths, GLA)
+                # Structure information (Improvements Section: Subject Rooms, Beds, Baths, GLA/GBA)
                 if tag == "STRUCTURE":
-                    if attrib.get("TotalRoomCount") and data["total_rooms"] is None:
+                    if attrib.get("TotalRoomCount") is not None and data["total_rooms"] is None:
                         data["total_rooms"] = safe_int(attrib.get("TotalRoomCount"))
-                    if attrib.get("TotalBedroomCount") and data["total_bedrooms"] is None:
+                        data["sections"]["improvements"]["rooms"] = data["total_rooms"]
+                    if attrib.get("TotalBedroomCount") is not None and data["total_bedrooms"] is None:
                         data["total_bedrooms"] = safe_int(attrib.get("TotalBedroomCount"))
-                    if attrib.get("TotalBathroomCount") and data["total_bathrooms"] is None:
-                        data["total_bathrooms"] = safe_float(
-                            attrib.get("TotalBathroomCount")
-                        )
-                    if attrib.get("GrossLivingAreaSquareFeetCount") and data["gross_living_area"] is None:
-                        data["gross_living_area"] = safe_float(
-                            attrib.get("GrossLivingAreaSquareFeetCount")
-                        )
+                        data["sections"]["improvements"]["bedrooms"] = data["total_bedrooms"]
+                    if attrib.get("TotalBathroomCount") is not None and data["total_bathrooms"] is None:
+                        data["total_bathrooms"] = safe_float(attrib.get("TotalBathroomCount"))
+                        data["sections"]["improvements"]["bathrooms"] = data["total_bathrooms"]
+                    gla_attr = (
+                        attrib.get("GrossLivingAreaSquareFeetCount")
+                        or attrib.get("GrossBuildingAreaSquareFeetCount")
+                        or attrib.get("TotalGrossBuildingAreaSquareFeetCount")
+                    )
+                    if gla_attr is not None and data["gross_living_area"] is None:
+                        data["gross_living_area"] = safe_float(gla_attr)
+                        data["sections"]["improvements"]["gla"] = data["gross_living_area"]
 
                 # Valuation (Subject only)
                 if tag == "VALUATION":
                     if attrib.get("PropertyAppraisedValueAmount") and not data["appraised_value"]:
                         data["appraised_value"] = attrib.get("PropertyAppraisedValueAmount")
 
-                # Basement below grade rooms from Subject column of Sales Grid
+                # Basement below grade & Sales Grid values from Subject column
                 if tag == "COMPARISON_DETAIL":
+                    if attrib.get("GSEAboveGradeTotalRoomCount") is not None and data["sections"]["sales_grid"]["rooms"] is None:
+                        data["sections"]["sales_grid"]["rooms"] = safe_int(attrib.get("GSEAboveGradeTotalRoomCount"))
+                    if attrib.get("GSEAboveGradeBedroomCount") is not None and data["sections"]["sales_grid"]["bedrooms"] is None:
+                        data["sections"]["sales_grid"]["bedrooms"] = safe_int(attrib.get("GSEAboveGradeBedroomCount"))
+                    if attrib.get("GSEAboveGradeBathroomCount") is not None and data["sections"]["sales_grid"]["bathrooms"] is None:
+                        data["sections"]["sales_grid"]["bathrooms"] = safe_float(attrib.get("GSEAboveGradeBathroomCount"))
+                    grid_gla_attr = (
+                        attrib.get("GSEGrossLivingAreaSquareFeetNumber")
+                        or attrib.get("GSEGrossBuildingAreaSquareFeetNumber")
+                    )
+                    if grid_gla_attr is not None and data["sections"]["sales_grid"]["gla"] is None:
+                        data["sections"]["sales_grid"]["gla"] = safe_float(grid_gla_attr)
                     if attrib.get("GSEBelowGradeTotalSquareFeetNumber") is not None and data["basement_total_sqft"] is None:
                         data["basement_total_sqft"] = safe_int(attrib.get("GSEBelowGradeTotalSquareFeetNumber"))
                     if attrib.get("GSEBelowGradeFinishSquareFeetNumber") is not None and data["basement_finished_sqft"] is None:
@@ -129,6 +162,12 @@ class XMLAppraisalParser:
                 elif tag == "SALE_PRICE_ADJUSTMENT":
                     adj_type = (attrib.get("_Type") or "").lower()
                     desc = attrib.get("_Description", "")
+                    if "grosslivingarea" in adj_type or "grossbuildingarea" in adj_type:
+                        m_gla_adj = re.search(r"([\d,]+)", desc)
+                        if m_gla_adj and data["sections"]["sales_grid"]["gla"] is None:
+                            val = safe_float(m_gla_adj.group(1))
+                            if val and val >= 150:
+                                data["sections"]["sales_grid"]["gla"] = val
                     is_basement_adj = (not adj_type) or ("basement" in adj_type) or ("belowgrade" in adj_type)
                     if is_basement_adj:
                         m = re.search(r"(\d+)\s*rr\s*(\d+)\s*br\s*([\d\.]+)\s*ba\s*(\d+)\s*o", desc, re.I)

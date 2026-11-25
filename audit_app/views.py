@@ -181,6 +181,17 @@ def audit_detail_view(request, audit_id):
     missing_labels_list = photo_slots.filter(is_missing_label=True)
     flagged_blanks = blank_pages.filter(is_blank=True)
 
+    reconciliation = _build_reconciliation(
+        audit=audit,
+        bedroom_photos=bedroom_photos,
+        bathroom_photos=bathroom_photos,
+        basement_photos=basement_photos,
+        basement_rec_photos=basement_rec_photos,
+        basement_bedroom_photos=basement_bedroom_photos,
+        basement_bath_photos=basement_bath_photos,
+        basement_other_photos=basement_other_photos,
+    )
+
     context = {
         'audit': audit,
         'photo_slots': filtered_photos_list,
@@ -200,8 +211,194 @@ def audit_detail_view(request, audit_id):
         'basement_bath_photos': basement_bath_photos,
         'basement_rec_photos': basement_rec_photos,
         'basement_other_photos': basement_other_photos,
+        'reconciliation': reconciliation,
     }
     return render(request, 'audit_app/detail.html', context)
+
+
+def _expected_bath_rooms(val):
+    """Converts UAD bath count (e.g. 1.1 -> 1 full + 1 half = 2 rooms, 1.5 -> 2 rooms)."""
+    whole = int(val)
+    tenths = int(round((val - whole) * 10))
+    return whole + (1 if tenths == 5 else tenths)
+
+
+def _build_reconciliation(
+    audit,
+    bedroom_photos,
+    bathroom_photos,
+    basement_photos,
+    basement_rec_photos,
+    basement_bedroom_photos,
+    basement_bath_photos,
+    basement_other_photos,
+):
+    """Computes accurate per-section values and truthful audit statuses across all 4 sources."""
+    raw_meta = (audit.raw_data or {}).get("summary", {}).get("xml_property_metadata", {})
+    sections = raw_meta.get("sections", {})
+    sk = sections.get("sketch", {})
+    imp = sections.get("improvements", {})
+    grid = sections.get("sales_grid", {})
+    has_sections = bool(sections)
+
+    SUCCESS = ("bg-success-subtle text-success border border-success", "bi-check-circle-fill")
+    WARNING = ("bg-warning-subtle text-warning border border-warning", "bi-exclamation-triangle-fill")
+    DANGER = ("bg-danger-subtle text-danger border border-danger", "bi-x-circle-fill")
+    INFO = ("bg-info-subtle text-info border border-info", "bi-info-circle-fill")
+    NEUTRAL = ("bg-secondary-subtle text-secondary border border-secondary", "bi-dash-circle")
+
+    # 1. GLA / GBA
+    sketch_gla = sk.get("gla")
+    imp_gla = imp.get("gla") if has_sections else audit.gross_living_area
+    grid_gla = grid.get("gla") if has_sections else audit.gross_living_area
+    gla_vals = [v for v in (sketch_gla, imp_gla, grid_gla) if v is not None and v > 0]
+    if not gla_vals:
+        gla_status, (gla_cls, gla_icon) = "N/A", NEUTRAL
+    elif len(gla_vals) == 1:
+        gla_status, (gla_cls, gla_icon) = "Single Source", INFO
+    elif max(gla_vals) - min(gla_vals) <= 5:
+        gla_status = "3-Way Match" if len(gla_vals) == 3 else "Matched"
+        gla_cls, gla_icon = SUCCESS
+    else:
+        diff = int(round(max(gla_vals) - min(gla_vals)))
+        gla_status, (gla_cls, gla_icon) = f"Variance ({diff} sf)", DANGER
+
+    # 2. Bedrooms
+    sketch_beds = sk.get("bedrooms")
+    imp_beds = imp.get("bedrooms") if imp.get("bedrooms") is not None else audit.total_bedrooms
+    grid_beds = grid.get("bedrooms") if has_sections else audit.total_bedrooms
+    bed_form_vals = [v for v in (sketch_beds, imp_beds, grid_beds) if v is not None]
+    photo_beds = len(bedroom_photos)
+    if not bed_form_vals:
+        bed_status, (bed_cls, bed_icon) = "N/A", NEUTRAL
+    elif len(set(bed_form_vals)) > 1:
+        bed_status, (bed_cls, bed_icon) = "Form Discrepancy", DANGER
+    elif bed_form_vals[0] == photo_beds:
+        bed_status = "4-Way Match" if len(bed_form_vals) == 3 else ("3-Way Match" if len(bed_form_vals) == 2 else "Photo Match")
+        bed_cls, bed_icon = SUCCESS
+    else:
+        bed_status, (bed_cls, bed_icon) = "Photo Variance", WARNING
+
+    # 3. Bathrooms
+    sketch_baths = sk.get("bathrooms")
+    imp_baths = imp.get("bathrooms") if imp.get("bathrooms") is not None else audit.total_bathrooms
+    grid_baths = grid.get("bathrooms") if has_sections else audit.total_bathrooms
+    bath_form_vals = [v for v in (sketch_baths, imp_baths, grid_baths) if v is not None]
+    photo_baths = len(bathroom_photos)
+    if not bath_form_vals:
+        bath_status, (bath_cls, bath_icon) = "N/A", NEUTRAL
+    elif len(set(round(float(v), 2) for v in bath_form_vals)) > 1:
+        bath_status, (bath_cls, bath_icon) = "Form Discrepancy", DANGER
+    else:
+        declared_bath = float(bath_form_vals[0])
+        expected_bath = _expected_bath_rooms(declared_bath)
+        if photo_baths < int(declared_bath):
+            bath_status, (bath_cls, bath_icon) = "Missing Bath Photos", WARNING
+        elif photo_baths == expected_bath:
+            bath_status, (bath_cls, bath_icon) = "Verified Match", SUCCESS
+        else:
+            bath_status, (bath_cls, bath_icon) = "Photo Variance", WARNING
+
+    # 4. Total Rooms
+    sketch_rooms = sk.get("rooms")
+    imp_rooms = imp.get("rooms") if imp.get("rooms") is not None else audit.total_rooms
+    grid_rooms = grid.get("rooms") if has_sections else audit.total_rooms
+    room_form_vals = [v for v in (sketch_rooms, imp_rooms, grid_rooms) if v is not None]
+    photo_rooms = audit.room_photos_identified
+    if not room_form_vals:
+        room_status, (room_cls, room_icon) = "N/A", NEUTRAL
+    elif len(set(room_form_vals)) > 1:
+        room_status, (room_cls, room_icon) = "Form Discrepancy", DANGER
+    elif room_form_vals[0] == photo_rooms:
+        room_status, (room_cls, room_icon) = "Verified Match", SUCCESS
+    else:
+        room_status, (room_cls, room_icon) = "Photo Variance", WARNING
+
+    # 5. Basement Rooms Below Grade
+    sketch_bsmt_sqft = sk.get("basement_sqft")
+    imp_bsmt_sqft = audit.basement_total_sqft if audit.basement_total_sqft is not None else imp.get("basement_sqft")
+    imp_bsmt_fin = audit.basement_finished_sqft
+    bsmt_photo_total = len(basement_photos)
+    bsmt_photo_rec = len(basement_rec_photos)
+    bsmt_photo_bed = len(basement_bedroom_photos)
+    bsmt_photo_bath = len(basement_bath_photos)
+    bsmt_photo_other = len(basement_other_photos)
+
+    if audit.basement_rr is None and not audit.basement_rooms_summary and imp_bsmt_sqft is None:
+        if bsmt_photo_total > 0:
+            bsmt_status, (bsmt_cls, bsmt_icon) = "Unlisted Photos", WARNING
+        else:
+            bsmt_status, (bsmt_cls, bsmt_icon) = "N/A", NEUTRAL
+    elif imp_bsmt_sqft == 0 and audit.basement_rr is None:
+        if bsmt_photo_total == 0:
+            bsmt_status, (bsmt_cls, bsmt_icon) = "No Basement", SUCCESS
+        else:
+            bsmt_status, (bsmt_cls, bsmt_icon) = "Photo Variance", WARNING
+    elif audit.basement_rr is not None:
+        matches_all = (
+            bsmt_photo_rec == (audit.basement_rr or 0)
+            and bsmt_photo_bed == (audit.basement_br or 0)
+            and bsmt_photo_bath >= int(audit.basement_ba or 0)
+            and bsmt_photo_other == (audit.basement_other or 0)
+        )
+        if matches_all:
+            bsmt_status, (bsmt_cls, bsmt_icon) = "Grid ↔ Photo Match", SUCCESS
+        else:
+            bsmt_status, (bsmt_cls, bsmt_icon) = "Photo Variance", WARNING
+    else:
+        bsmt_status, (bsmt_cls, bsmt_icon) = "Grid Verified", INFO
+
+    return {
+        "gla": {
+            "sketch": sketch_gla,
+            "sketch_page": sk.get("page"),
+            "imp": imp_gla,
+            "grid": grid_gla,
+            "status": gla_status,
+            "badge_cls": gla_cls,
+            "icon": gla_icon,
+        },
+        "bedrooms": {
+            "sketch": sketch_beds,
+            "imp": imp_beds,
+            "grid": grid_beds,
+            "photos": photo_beds,
+            "status": bed_status,
+            "badge_cls": bed_cls,
+            "icon": bed_icon,
+        },
+        "bathrooms": {
+            "sketch": sketch_baths,
+            "imp": imp_baths,
+            "grid": grid_baths,
+            "photos": photo_baths,
+            "status": bath_status,
+            "badge_cls": bath_cls,
+            "icon": bath_icon,
+        },
+        "total_rooms": {
+            "sketch": sketch_rooms,
+            "imp": imp_rooms,
+            "grid": grid_rooms,
+            "photos": photo_rooms,
+            "status": room_status,
+            "badge_cls": room_cls,
+            "icon": room_icon,
+        },
+        "basement": {
+            "sketch_sqft": sketch_bsmt_sqft,
+            "imp_sqft": imp_bsmt_sqft,
+            "imp_fin_sqft": imp_bsmt_fin,
+            "photo_total": bsmt_photo_total,
+            "photo_rec": bsmt_photo_rec,
+            "photo_bed": bsmt_photo_bed,
+            "photo_bath": bsmt_photo_bath,
+            "photo_other": bsmt_photo_other,
+            "status": bsmt_status,
+            "badge_cls": bsmt_cls,
+            "icon": bsmt_icon,
+        },
+    }
 
 
 def _permanently_delete_audit(audit):

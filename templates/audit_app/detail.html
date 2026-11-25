@@ -306,24 +306,24 @@
                         </div>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{% if audit.gross_living_area %}{{ audit.gross_living_area|floatformat:0 }} Sq Ft{% else %}—{% endif %}</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Reconciled from Appraisal Report</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.gla.sketch %}{{ reconciliation.gla.sketch|floatformat:0 }} Sq Ft{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">{% if reconciliation.gla.sketch_page %}Sketch Page {{ reconciliation.gla.sketch_page }}{% else %}Not Parsed on Sketch{% endif %}</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{% if audit.gross_living_area %}{{ audit.gross_living_area|floatformat:0 }} Sq Ft{% else %}—{% endif %}</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Form Finished Area</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.gla.imp %}{{ reconciliation.gla.imp|floatformat:0 }} Sq Ft{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Form Finished / GBA</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{% if audit.gross_living_area %}{{ audit.gross_living_area|floatformat:0 }} Sq Ft{% else %}—{% endif %}</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Unit</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.gla.grid %}{{ reconciliation.gla.grid|floatformat:0 }} Sq Ft{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Column</span>
                     </td>
                     <td>
                         <div class="text-muted">—</div>
                         <span class="text-muted" style="font-size: 0.75rem;">Visual Only (Non-GLA)</span>
                     </td>
                     <td class="text-end pe-4">
-                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                            <i class="bi bi-check-circle-fill me-1"></i> Imp &harr; Grid Match
+                        <span class="badge {{ reconciliation.gla.badge_cls }} px-2 py-1">
+                            <i class="bi {{ reconciliation.gla.icon }} me-1"></i> {{ reconciliation.gla.status }}
                         </span>
                     </td>
                 </tr>
@@ -339,30 +339,27 @@
                         </div>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_bedrooms|default:"—" }} Bedrooms</div>
+                        <div class="fw-bold text-dark">{% if reconciliation.bedrooms.sketch is not None %}{{ reconciliation.bedrooms.sketch }} Bedrooms{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">{% if reconciliation.bedrooms.sketch is not None %}Labeled on Sketch{% else %}Not Labeled on Sketch{% endif %}</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_bedrooms|default:"—" }} Bedrooms</div>
+                        <div class="fw-bold text-dark">{% if reconciliation.bedrooms.imp is not None %}{{ reconciliation.bedrooms.imp }} Bedrooms{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
                         <span class="text-muted" style="font-size: 0.75rem;">Form Finished Area</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_bedrooms|default:"—" }} Bedrooms</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Unit</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.bedrooms.grid is not None %}{{ reconciliation.bedrooms.grid }} Bedrooms{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Column</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.bedroom_photos_identified }} Beds</div>
+                        <div class="fw-bold text-primary cursor-pointer" onclick="showGroupPhotos('bedrooms', 'Bedrooms')" style="cursor: pointer;" title="Click to view bedroom photos">
+                            {{ reconciliation.bedrooms.photos }} Beds <i class="bi bi-images ms-1 small"></i>
+                        </div>
                         <span class="text-muted" style="font-size: 0.75rem;">Photo Addendum Labels</span>
                     </td>
                     <td class="text-end pe-4">
-                        {% if audit.total_bedrooms == audit.bedroom_photos_identified %}
-                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                                <i class="bi bi-check-circle-fill me-1"></i> 4-Way Match
-                            </span>
-                        {% else %}
-                            <span class="badge bg-warning-subtle text-warning border border-warning px-2 py-1">
-                                <i class="bi bi-exclamation-triangle-fill me-1"></i> Photo Variance
-                            </span>
-                        {% endif %}
+                        <span class="badge {{ reconciliation.bedrooms.badge_cls }} px-2 py-1">
+                            <i class="bi {{ reconciliation.bedrooms.icon }} me-1"></i> {{ reconciliation.bedrooms.status }}
+                        </span>
                     </td>
                 </tr>
 
@@ -377,22 +374,26 @@
                         </div>
                     </td>
                     <td>
-                        <div class="text-muted">0</div>
+                        <div class="fw-bold text-dark">{% if reconciliation.bathrooms.sketch is not None %}{{ reconciliation.bathrooms.sketch }} Bath(s){% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">{% if reconciliation.bathrooms.sketch is not None %}Labeled on Sketch{% else %}Not Labeled on Sketch{% endif %}</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_bathrooms|default:"—" }} Bath(s)</div>
+                        <div class="fw-bold text-dark">{% if reconciliation.bathrooms.imp is not None %}{{ reconciliation.bathrooms.imp }} Bath(s){% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
                         <span class="text-muted" style="font-size: 0.75rem;">Form Finished Area</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_bathrooms|default:"—" }} Bath(s)</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Unit</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.bathrooms.grid is not None %}{{ reconciliation.bathrooms.grid }} Bath(s){% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Column</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.bathroom_photos_identified }} Full Baths</div>
+                        <div class="fw-bold text-primary cursor-pointer" onclick="showGroupPhotos('bathrooms', 'Bathrooms')" style="cursor: pointer;" title="Click to view bathroom photos">
+                            {{ reconciliation.bathrooms.photos }} Bath(s) <i class="bi bi-images ms-1 small"></i>
+                        </div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Photo Addendum Labels</span>
                     </td>
                     <td class="text-end pe-4">
-                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                            <i class="bi bi-check-circle-fill me-1"></i> 3-Way Match
+                        <span class="badge {{ reconciliation.bathrooms.badge_cls }} px-2 py-1">
+                            <i class="bi {{ reconciliation.bathrooms.icon }} me-1"></i> {{ reconciliation.bathrooms.status }}
                         </span>
                     </td>
                 </tr>
@@ -408,31 +409,27 @@
                         </div>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_rooms|default:"—" }} Rooms</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">(Bedrooms + Living + Dining + Kitchen)</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.total_rooms.sketch is not None %}{{ reconciliation.total_rooms.sketch }} Rooms{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">{% if reconciliation.total_rooms.sketch is not None %}Labeled on Sketch{% else %}Not Labeled on Sketch{% endif %}</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_rooms|default:"—" }} Rooms</div>
+                        <div class="fw-bold text-dark">{% if reconciliation.total_rooms.imp is not None %}{{ reconciliation.total_rooms.imp }} Rooms{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
                         <span class="text-muted" style="font-size: 0.75rem;">Form Finished Area</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.total_rooms|default:"—" }} Rooms</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Unit</span>
+                        <div class="fw-bold text-dark">{% if reconciliation.total_rooms.grid is not None %}{{ reconciliation.total_rooms.grid }} Rooms{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Grid Subject Column</span>
                     </td>
                     <td>
-                        <div class="fw-bold text-dark">{{ audit.room_photos_identified }} Rooms</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">(Bedrooms + Living + Dining + Kitchen)</span>
+                        <div class="fw-bold text-primary cursor-pointer" onclick="showGroupPhotos('total_rooms', 'Total Rooms (Excl. BR, BA, Bsmt RR/BR/BA)')" style="cursor: pointer;" title="Click to view room photos">
+                            {{ reconciliation.total_rooms.photos }} Rooms <i class="bi bi-images ms-1 small"></i>
+                        </div>
+                        <span class="text-muted" style="font-size: 0.75rem;">Room Labels Identified</span>
                     </td>
                     <td class="text-end pe-4">
-                        {% if audit.total_rooms %}
-                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                                <i class="bi bi-check-circle-fill me-1"></i> 3-Way Match
-                            </span>
-                        {% else %}
-                            <span class="badge bg-secondary-subtle text-secondary border border-secondary px-2 py-1">
-                                N/A
-                            </span>
-                        {% endif %}
+                        <span class="badge {{ reconciliation.total_rooms.badge_cls }} px-2 py-1">
+                            <i class="bi {{ reconciliation.total_rooms.icon }} me-1"></i> {{ reconciliation.total_rooms.status }}
+                        </span>
                     </td>
                 </tr>
 
@@ -448,15 +445,15 @@
                         </div>
                     </td>
                     <td>
-                        <div class="text-muted">—</div>
+                        <div class="fw-bold text-dark">{% if reconciliation.basement.sketch_sqft %}{{ reconciliation.basement.sketch_sqft }} sf{% else %}<span class="text-muted fw-normal">—</span>{% endif %}</div>
                         <span class="text-muted" style="font-size: 0.75rem;">Subgrade / Non-GLA</span>
                     </td>
                     <td>
                         <div class="fw-bold text-dark">
-                            {% if audit.basement_total_sqft or audit.basement_finished_sqft %}
-                                {{ audit.basement_total_sqft|default:0 }} sf / {{ audit.basement_finished_sqft|default:0 }} sfin
+                            {% if reconciliation.basement.imp_sqft is not None %}
+                                {{ reconciliation.basement.imp_sqft }} sf{% if reconciliation.basement.imp_fin_sqft is not None %} / {{ reconciliation.basement.imp_fin_sqft }} sfin{% endif %}
                             {% else %}
-                                —
+                                <span class="text-muted fw-normal">—</span>
                             {% endif %}
                         </div>
                         <span class="text-muted" style="font-size: 0.75rem;">Basement Area</span>
@@ -468,31 +465,27 @@
                             {% elif audit.basement_rr is not None %}
                                 {{ audit.basement_rr }}rr {{ audit.basement_br }}br {{ audit.basement_ba }}ba {{ audit.basement_other }}o
                             {% else %}
-                                —
+                                <span class="text-muted fw-normal">—</span>
                             {% endif %}
                         </div>
                         <span class="text-muted" style="font-size: 0.75rem;">
                             {% if audit.basement_rr is not None %}
                                 Rec: {{ audit.basement_rr }} &bull; Bed: {{ audit.basement_br }} &bull; Bath: {{ audit.basement_ba }} &bull; Other: {{ audit.basement_other }}
                             {% else %}
-                                Grid Subject Unit
+                                Grid Subject Column
                             {% endif %}
                         </span>
                     </td>
                     <td>
-                        <div class="text-muted">—</div>
-                        <span class="text-muted" style="font-size: 0.75rem;">Visual Only</span>
+                        <div class="fw-bold text-dark">{{ reconciliation.basement.photo_total }} Photo(s)</div>
+                        <span class="text-muted" style="font-size: 0.75rem;">
+                            Rec: {{ reconciliation.basement.photo_rec }} &bull; Bed: {{ reconciliation.basement.photo_bed }} &bull; Bath: {{ reconciliation.basement.photo_bath }} &bull; Other: {{ reconciliation.basement.photo_other }}
+                        </span>
                     </td>
                     <td class="text-end pe-4">
-                        {% if audit.basement_rooms_summary or audit.basement_rr is not None %}
-                            <span class="badge bg-info-subtle text-info border border-info px-2 py-1">
-                                <i class="bi bi-check-circle-fill me-1"></i> Grid Verified
-                            </span>
-                        {% else %}
-                            <span class="badge bg-secondary-subtle text-secondary border border-secondary px-2 py-1">
-                                N/A
-                            </span>
-                        {% endif %}
+                        <span class="badge {{ reconciliation.basement.badge_cls }} px-2 py-1">
+                            <i class="bi {{ reconciliation.basement.icon }} me-1"></i> {{ reconciliation.basement.status }}
+                        </span>
                     </td>
                 </tr>
             </tbody>

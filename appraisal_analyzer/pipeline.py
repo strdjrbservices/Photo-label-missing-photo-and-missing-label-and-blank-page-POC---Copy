@@ -38,8 +38,16 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
         'basement_other': None,
         'basement_total_sqft': None,
         'basement_finished_sqft': None,
-        'basement_rooms_summary': None
+        'basement_rooms_summary': None,
+        'sections': {
+            'sketch': {'gla': None, 'rooms': None, 'bedrooms': None, 'bathrooms': None, 'basement_sqft': None, 'page': None},
+            'improvements': {'gla': None, 'rooms': None, 'bedrooms': None, 'bathrooms': None, 'basement_sqft': None, 'basement_finished_sqft': None},
+            'sales_grid': {'gla': None, 'rooms': None, 'bedrooms': None, 'bathrooms': None},
+        },
     }
+    imp_sec = metrics['sections']['improvements']
+    grid_sec = metrics['sections']['sales_grid']
+    sketch_sec = metrics['sections']['sketch']
     doc = None
     try:
         doc = pymupdf.open(pdf_path)
@@ -88,7 +96,7 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                     if zip_tokens:
                         metrics['zip_code'] = " ".join(zip_tokens).strip()
 
-            # 2. Finished Area Above Grade: Total Rooms, Bedrooms, Bathrooms, GLA
+            # 2. Finished Area Above Grade (Improvements Section): Total Rooms, Bedrooms, Bathrooms, GLA
             if "finished area above grade contains" in text.lower():
                 y_target = None
                 for w in words:
@@ -102,18 +110,47 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                         wl = w[4].lower()
                         if wl in ["rooms", "rooms:"] and idx > 0 and lw[idx - 1][4].replace(",", "").isdigit():
                             metrics["total_rooms"] = int(lw[idx - 1][4].replace(",", ""))
+                            imp_sec["rooms"] = metrics["total_rooms"]
                         elif "bedroom" in wl and idx > 0 and lw[idx - 1][4].replace(",", "").isdigit():
                             metrics["bedrooms"] = int(lw[idx - 1][4].replace(",", ""))
+                            imp_sec["bedrooms"] = metrics["bedrooms"]
                         elif "bath" in wl and idx > 0:
                             try:
                                 metrics["bathrooms"] = float(lw[idx - 1][4].replace(",", ""))
+                                imp_sec["bathrooms"] = metrics["bathrooms"]
                             except Exception:
                                 pass
                         elif "square" in wl and idx > 0:
                             try:
                                 metrics["gross_living_area"] = float(lw[idx - 1][4].replace(",", ""))
+                                imp_sec["gla"] = metrics["gross_living_area"]
                             except Exception:
                                 pass
+
+            # Improvements section GBA / Basement Area fallback (Form 1004 / 1025)
+            if "improvements" in text.lower() or "foundation" in text.lower():
+                if imp_sec["gla"] is None:
+                    m_imp_gba = re.search(
+                        r"Gross\s+(?:Building|Living)\s+Area\s*(?:Above\s+Grade)?[:\s]*([\d,]{3,})\s*(?:sq\.?\s*ft\.?|sf)?",
+                        text,
+                        re.I,
+                    )
+                    if m_imp_gba:
+                        try:
+                            val = float(m_imp_gba.group(1).replace(",", ""))
+                            if val >= 200:
+                                imp_sec["gla"] = val
+                                if metrics["gross_living_area"] is None:
+                                    metrics["gross_living_area"] = val
+                        except Exception:
+                            pass
+                if imp_sec["basement_sqft"] is None:
+                    m_imp_bsmt = re.search(r"Basement\s+Area\s*([\d,]+)\s*sq\.?\s*ft", text, re.I)
+                    if m_imp_bsmt:
+                        try:
+                            imp_sec["basement_sqft"] = int(m_imp_bsmt.group(1).replace(",", ""))
+                        except Exception:
+                            pass
 
             # 3. Sales Comparison Subject Column Extraction for Basement & Room Counts
             if "sales comparison approach" in text.lower() or "value adjustments" in text.lower():
@@ -224,23 +261,137 @@ def extract_pdf_form_metrics(pdf_path: str) -> dict:
                                 if m_sf1:
                                     metrics["basement_total_sqft"] = int(m_sf1.group(1))
 
+                    # Subject column GLA / GBA row strictly inside [subj_x_min, comp1_x_min)
+                    if grid_sec["gla"] is None:
+                        gla_labels = [
+                            w for w in words
+                            if w[4].lower() == "gross"
+                            and w[0] < subj_x_min
+                            and w[1] > subj_header_y
+                        ]
+                        for gl in gla_labels:
+                            gy = gl[1]
+                            feat_line = " ".join(
+                                w[4].lower() for w in words
+                                if w[0] < subj_x_min and abs(w[1] - gy) <= 8
+                            )
+                            if ("living area" in feat_line or "building area" in feat_line) and "sale price" not in feat_line:
+                                gla_clip = pymupdf.Rect(subj_x_min, gy - 5.0, comp1_x_min, gy + 12.0)
+                                gla_txt = " ".join(page.get_text("text", clip=gla_clip).split())
+                                m_grid_gla = re.search(r"([\d,]{3,})", gla_txt)
+                                if m_grid_gla:
+                                    try:
+                                        val = float(m_grid_gla.group(1).replace(",", ""))
+                                        if val >= 200:
+                                            grid_sec["gla"] = val
+                                            if metrics["gross_living_area"] is None:
+                                                metrics["gross_living_area"] = val
+                                            break
+                                    except Exception:
+                                        pass
+
                     # Subject column fallback room counts strictly clipped to Subject column [subj_x_min, comp1_x_min)
                     subj_clip = pymupdf.Rect(subj_x_min, subj_header_y, comp1_x_min, page.rect.height)
                     subj_text = " ".join(page.get_text("text", clip=subj_clip).split())
+
+                    # Form 1025 Unit Breakdown inside Subject column (Unit # 1..4 Total | Bdrms | Baths)
+                    unit_rows = [
+                        w for w in words
+                        if w[4].lower() == "unit"
+                        and w[0] < subj_x_min
+                        and w[1] > subj_header_y
+                    ]
+                    if unit_rows and grid_sec["rooms"] is None:
+                        u_rooms, u_beds, u_baths, u_found = 0, 0, 0.0, False
+                        for ur in unit_rows:
+                            uy = ur[1]
+                            u_line = " ".join(w[4] for w in words if w[0] < subj_x_min and abs(w[1] - uy) <= 6)
+                            if re.search(r"Unit\s*#\s*[1-4]", u_line, re.I):
+                                u_clip = pymupdf.Rect(subj_x_min, uy - 4.0, comp1_x_min, uy + 10.0)
+                                u_txt = " ".join(page.get_text("text", clip=u_clip).split())
+                                m_u = re.match(r"(\d+)\s+(\d+)\s+([\d\.]+)", u_txt)
+                                if m_u:
+                                    u_rooms += int(m_u.group(1))
+                                    u_beds += int(m_u.group(2))
+                                    u_baths += float(m_u.group(3))
+                                    u_found = True
+                        if u_found:
+                            grid_sec["rooms"] = u_rooms
+                            grid_sec["bedrooms"] = u_beds
+                            grid_sec["bathrooms"] = round(u_baths, 2)
                 else:
                     subj_text = ""
-                if metrics["total_rooms"] is None or metrics["bedrooms"] is None or metrics["gross_living_area"] is None:
+
+                if subj_text:
                     m_rc = re.search(r"Total\s+Bdrms\.?\s+Baths\s+(\d+)\s+(\d+)\s+([\d\.]+)", subj_text, re.I)
                     if m_rc:
-                        metrics["total_rooms"] = int(m_rc.group(1))
-                        metrics["bedrooms"] = int(m_rc.group(2))
-                        metrics["bathrooms"] = float(m_rc.group(3))
+                        if grid_sec["rooms"] is None:
+                            grid_sec["rooms"] = int(m_rc.group(1))
+                            grid_sec["bedrooms"] = int(m_rc.group(2))
+                            grid_sec["bathrooms"] = float(m_rc.group(3))
+                        if metrics["total_rooms"] is None:
+                            metrics["total_rooms"] = int(m_rc.group(1))
+                        if metrics["bedrooms"] is None:
+                            metrics["bedrooms"] = int(m_rc.group(2))
+                        if metrics["bathrooms"] is None:
+                            metrics["bathrooms"] = float(m_rc.group(3))
                     m_gla = re.search(r"([\d,]+)\s*sq\.?\s*ft", subj_text, re.I)
                     if m_gla and metrics["gross_living_area"] is None:
                         try:
-                            metrics["gross_living_area"] = float(m_gla.group(1).replace(",", ""))
+                            val = float(m_gla.group(1).replace(",", ""))
+                            if val >= 200:
+                                metrics["gross_living_area"] = val
+                                if grid_sec["gla"] is None:
+                                    grid_sec["gla"] = val
                         except Exception:
                             pass
+
+        # 3b. Building Sketch / Living Area Calculation Page Extraction
+        for p_idx in range(len(doc)):
+            stext = doc[p_idx].get_text()
+            stext_lower = stext.lower()
+            is_sketch_page = any(
+                kw in stext_lower
+                for kw in ["building sketch", "living area calculation", "area calculations", "floor plan", "gla calculation"]
+            ) and "comparable sale" not in stext_lower
+            if is_sketch_page:
+                if sketch_sec["page"] is None:
+                    sketch_sec["page"] = p_idx + 1
+                if sketch_sec["gla"] is None:
+                    for pat in [
+                        r"Total\s+Living\s+Area(?:\s*\([^)]*\))?\s*[:\-]?\s*([\d,]{3,})",
+                        r"Total\s+Building\s+Area(?:\s*\([^)]*\))?\s*[:\-]?\s*([\d,]{3,})",
+                        r"Gross\s+(?:Living|Building)\s+Area\s*[:\-]?\s*([\d,]{3,})",
+                        r"TOTAL\s+GLA\s*[:\-]?\s*([\d,]{3,})",
+                        r"Living\s+Area\s*[:\-]?\s*([\d,]{3,})\s*(?:sq\.?\s*ft\.?|sf)",
+                    ]:
+                        m_sgla = re.search(pat, stext, re.I)
+                        if m_sgla:
+                            try:
+                                val = float(m_sgla.group(1).replace(",", ""))
+                                if val >= 200:
+                                    sketch_sec["gla"] = val
+                                    break
+                            except Exception:
+                                pass
+                if sketch_sec["basement_sqft"] is None:
+                    m_sbsmt = re.search(r"Basement\s*(?:\([^)]*\))?\s*[:\-]?\s*([\d,]{3,})\s*(?:sq\.?\s*ft\.?|sf)?", stext, re.I)
+                    if m_sbsmt:
+                        try:
+                            sketch_sec["basement_sqft"] = int(m_sbsmt.group(1).replace(",", ""))
+                        except Exception:
+                            pass
+                # Only count room labels if individual room tags appear on the sketch canvas
+                lines_clean = [ln.strip().lower() for ln in stext.splitlines() if ln.strip()]
+                sk_beds = sum(1 for ln in lines_clean if re.fullmatch(r"(?:master\s+|primary\s+|unit\s*#?\d*\s*)?(?:bedroom|bdrm|br)(?:\s*\d+)?", ln))
+                sk_baths = sum(1 for ln in lines_clean if re.fullmatch(r"(?:master\s+|primary\s+|full\s+|half\s+|1/2\s+|unit\s*#?\d*\s*)?(?:bath|bathroom|bth|ba)(?:\s*\d+)?", ln))
+                sk_other = sum(1 for ln in lines_clean if re.fullmatch(r"(?:unit\s*#?\d*\s*)?(?:kitchen|living\s*room|living|dining\s*room|dining|family\s*room|den|office|sunroom|solarium|mudroom|mud\s*room|foyer)(?:\s*\d+)?", ln))
+                if sk_beds > 0 and sketch_sec["bedrooms"] is None:
+                    sketch_sec["bedrooms"] = sk_beds
+                if sk_baths > 0 and sketch_sec["bathrooms"] is None:
+                    sketch_sec["bathrooms"] = float(sk_baths)
+                if (sk_beds + sk_other) > 0 and sketch_sec["rooms"] is None:
+                    sketch_sec["rooms"] = sk_beds + sk_other
 
         # 4. Appraised Value extraction across document
         target_val_keywords = [
@@ -330,6 +481,14 @@ class AppraisalReportPipeline:
         if pdf_path and os.path.exists(pdf_path):
             pdf_form_meta = extract_pdf_form_metrics(pdf_path)
             for k, v in pdf_form_meta.items():
+                if k == "sections":
+                    dst_secs = xml_metadata.setdefault("sections", {})
+                    for sec_name, sec_dict in v.items():
+                        target = dst_secs.setdefault(sec_name, {})
+                        for sk, sv in sec_dict.items():
+                            if sv is not None and target.get(sk) is None:
+                                target[sk] = sv
+                    continue
                 if v is not None:
                     if xml_metadata.get(k) is None:
                         xml_metadata[k] = v
@@ -339,13 +498,13 @@ class AppraisalReportPipeline:
                         xml_metadata["city"] = v
                     elif k == "appraised_value" and not xml_metadata.get("appraised_value"):
                         xml_metadata["appraised_value"] = v
-                    elif k == "total_rooms" and not xml_metadata.get("total_rooms"):
+                    elif k == "total_rooms" and xml_metadata.get("total_rooms") is None:
                         xml_metadata["total_rooms"] = v
-                    elif k == "bedrooms" and not xml_metadata.get("total_bedrooms"):
+                    elif k == "bedrooms" and xml_metadata.get("total_bedrooms") is None:
                         xml_metadata["total_bedrooms"] = v
-                    elif k == "bathrooms" and not xml_metadata.get("total_bathrooms"):
+                    elif k == "bathrooms" and xml_metadata.get("total_bathrooms") is None:
                         xml_metadata["total_bathrooms"] = v
-                    elif k == "gross_living_area" and not xml_metadata.get("gross_living_area"):
+                    elif k == "gross_living_area" and xml_metadata.get("gross_living_area") is None:
                         xml_metadata["gross_living_area"] = v
                     elif k.startswith("basement_") and xml_metadata.get(k) is None:
                         xml_metadata[k] = v
@@ -395,9 +554,10 @@ class AppraisalReportPipeline:
                 "state": xml_metadata.get("state"),
                 "zip_code": xml_metadata.get("zip_code"),
                 "total_rooms": xml_metadata.get("total_rooms"),
-                "bedrooms": xml_metadata.get("total_bedrooms") or xml_metadata.get("bedrooms"),
-                "bathrooms": xml_metadata.get("total_bathrooms") or xml_metadata.get("bathrooms"),
+                "bedrooms": xml_metadata.get("total_bedrooms") if xml_metadata.get("total_bedrooms") is not None else xml_metadata.get("bedrooms"),
+                "bathrooms": xml_metadata.get("total_bathrooms") if xml_metadata.get("total_bathrooms") is not None else xml_metadata.get("bathrooms"),
                 "gross_living_area": xml_metadata.get("gross_living_area"),
+                "sections": xml_metadata.get("sections", {}),
                 "appraised_value": xml_metadata.get("appraised_value"),
                 "basement_rr": xml_metadata.get("basement_rr"),
                 "basement_br": xml_metadata.get("basement_br"),
